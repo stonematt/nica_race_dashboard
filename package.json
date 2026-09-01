@@ -20,6 +20,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node bin/migrate.ts",
     "db:studio": "drizzle-kit studio",
+    "seed": "node bin/seed.ts",
     "fetch": "node bin/fetch.ts",
     "normalize": "node bin/normalize.ts"
   },
