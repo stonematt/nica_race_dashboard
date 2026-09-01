@@ -22,7 +22,7 @@ never rendered without auth and never leaves a local file without an explicit de
 Storing the corpus outside the working tree makes an accidental `git add` impossible,
 rather than relying on `.gitignore` holding the line on a public repo.
 
-Anything derived from these payloads that *does* get committed — schema notes, worked
+Anything derived from these payloads that _does_ get committed — schema notes, worked
 examples, test fixtures — must have rider names redacted first. The pattern used in the
 issue threads is stable pseudonyms (`«RIDER-A»`), which keeps worked calculations
 verifiable while carrying no identity.
