@@ -5,20 +5,37 @@
  * This is the single gate. A provider proving someone controls an address does
  * not admit them; being on this list does. There is no bypass token, no demo
  * account, and no share link, by decision.
+ *
+ * Kept free of imports on purpose: it runs in the Edge runtime from
+ * src/auth.config.ts, in Node from src/auth.ts, and under vitest with an
+ * injected env. Anything pulled in here has to survive all three.
  */
 
-export function allowedEmails(env = process.env): string[] {
-  return (env.AUTH_ALLOWED_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
+/**
+ * An environment to read the list from. Deliberately an index signature rather
+ * than `{ AUTH_ALLOWED_EMAILS?: string }` — Node's `ProcessEnv` declares no
+ * properties of its own, so the narrower shape trips TypeScript's weak-type
+ * check and `process.env` will not assign to it.
+ */
+export type AllowlistEnv = Record<string, string | undefined>;
+
+/** Addresses compare case-insensitively and ignore surrounding whitespace. */
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }
 
-export function isAllowed(email: string | null | undefined, env = process.env): boolean {
+export function allowedEmails(env: AllowlistEnv = process.env): string[] {
+  return (env.AUTH_ALLOWED_EMAILS ?? '').split(',').map(normalizeEmail).filter(Boolean);
+}
+
+export function isAllowed(
+  email: string | null | undefined,
+  env: AllowlistEnv = process.env,
+): boolean {
   if (!email) return false;
   const list = allowedEmails(env);
   // An empty allowlist admits nobody. Failing closed matters more here than
   // convenience: the app renders minors' names.
   if (list.length === 0) return false;
-  return list.includes(email.trim().toLowerCase());
+  return list.includes(normalizeEmail(email));
 }

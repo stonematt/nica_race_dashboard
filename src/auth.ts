@@ -17,8 +17,7 @@ import { authConfig } from './auth.config.ts';
 import { createDb, schema } from './lib/db/index.ts';
 import { isAllowed } from './lib/allowlist.ts';
 
-const isDevLogin =
-  process.env.NODE_ENV === 'development' && process.env.AUTH_DEV_LOGIN === '1';
+const isDevLogin = process.env.NODE_ENV === 'development' && process.env.AUTH_DEV_LOGIN === '1';
 
 function providers(): Provider[] {
   const list: Provider[] = [];
