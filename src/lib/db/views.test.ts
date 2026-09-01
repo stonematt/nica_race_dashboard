@@ -5,14 +5,11 @@
  */
 
 import { sql } from 'drizzle-orm';
-import { PGlite } from '@electric-sql/pglite';
-import { drizzle } from 'drizzle-orm/pglite';
-import { migrate } from 'drizzle-orm/pglite/migrator';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as schema from './schema.ts';
+import { createTestDb, type TestDatabase } from './testing.ts';
 
-type Db = ReturnType<typeof drizzle<typeof schema>>;
-let db: Db;
+let db: TestDatabase;
 
 /** (plate, place, time_seconds, laps, status) straight off the published list. */
 const HS1_BOYS_NORTH = [
@@ -29,9 +26,7 @@ const HS1_BOYS_NORTH = [
 ] as const;
 
 beforeAll(async () => {
-  const client = new PGlite(); // in-memory; nothing to clean up
-  db = drizzle(client, { schema });
-  await migrate(db, { migrationsFolder: './src/lib/db/migrations' });
+  db = await createTestDb();
 
   await db.insert(schema.season).values({ id: 1, year: 2025 });
   await db.insert(schema.round).values({ id: 1, seasonId: 1, ordinal: 4, name: 'Race 4' });
@@ -156,7 +151,7 @@ describe('v_unmapped_rider', () => {
     expect(after).toHaveLength(0);
   });
 
-  it('resolves rider identity within the plate\'s race bounds only', async () => {
+  it("resolves rider identity within the plate's race bounds only", async () => {
     // A plate reissued mid-season: bounded rows keep the two people apart.
     await db.insert(schema.rider).values({ id: 2, displayName: 'Second Person' });
     await db
@@ -170,8 +165,9 @@ describe('v_unmapped_rider', () => {
       fromRoundOrdinal: 4,
     });
 
-    const r = (await db.execute(`select rider_id, rider_name from v_rider_result where plate = '886'`))
-      .rows as Record<string, unknown>[];
+    const r = (
+      await db.execute(`select rider_id, rider_name from v_rider_result where plate = '886'`)
+    ).rows as Record<string, unknown>[];
     expect(r).toHaveLength(1);
     expect(r[0].rider_name).toBe('Second Person');
   });
