@@ -81,6 +81,9 @@ describe('the middleware matcher', () => {
     expect(gated('/_next/static/chunk.js')).toBe(false);
     expect(gated('/_next/image/x.png')).toBe(false);
     expect(gated('/favicon.ico')).toBe(false);
+    // The app icon. Rendered on the sign-in page, which is itself anonymous,
+    // so gating it would leave the one public page without one.
+    expect(gated('/icon.svg')).toBe(false);
     expect(gated('/robots.txt')).toBe(false);
   });
 
@@ -91,6 +94,7 @@ describe('the middleware matcher', () => {
     expect(gated('/signin-preview')).toBe(true);
     expect(gated('/signinner')).toBe(true);
     expect(gated('/robots.txt.bak')).toBe(true);
+    expect(gated('/icon.svg.map')).toBe(true);
     expect(gated('/favicon.ico.map')).toBe(true);
     expect(gated('/_next/staticky')).toBe(true);
   });

@@ -27,6 +27,6 @@ export const config = {
      * `/signin-preview`, handing an attacker a route outside the gate for the
      * price of a prefix.
      */
-    '/((?!api/auth/|signin$|_next/static/|_next/image/|favicon\\.ico$|robots\\.txt$).*)',
+    '/((?!api/auth/|signin$|_next/static/|_next/image/|favicon\\.ico$|icon\\.svg$|robots\\.txt$).*)',
   ],
 };
