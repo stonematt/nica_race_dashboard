@@ -16,13 +16,15 @@ import Nodemailer from 'next-auth/providers/nodemailer';
 import { authConfig } from './auth.config.ts';
 import { createDb, schema } from './lib/db/index.ts';
 import { isAllowed } from './lib/allowlist.ts';
-
-const isDevLogin = process.env.NODE_ENV === 'development' && process.env.AUTH_DEV_LOGIN === '1';
+import { availableProviders } from './lib/signin-providers.ts';
 
 function providers(): Provider[] {
   const list: Provider[] = [];
+  // The sign-in page renders its forms from this same function, so a form can
+  // never be offered for a provider that was not registered here.
+  const { email, dev } = availableProviders();
 
-  if (process.env.AUTH_EMAIL_SERVER) {
+  if (email) {
     list.push(
       Nodemailer({
         server: process.env.AUTH_EMAIL_SERVER,
@@ -31,7 +33,7 @@ function providers(): Provider[] {
     );
   }
 
-  if (isDevLogin) {
+  if (dev) {
     list.push(
       Credentials({
         id: 'dev',
