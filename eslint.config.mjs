@@ -35,9 +35,6 @@ export default [
   },
   {
     rules: {
-      // Node's native type stripping requires the .ts extension on relative
-      // imports — that is how bin/ runs with no build step (see tsconfig).
-      '@typescript-eslint/consistent-type-imports': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },

@@ -1,11 +1,13 @@
 /**
  * next-auth v5. Per-coach accounts, email-allowlisted (issue #3).
  *
- * Two providers, and only one of them ever runs in production:
- *   - Nodemailer magic link, active when AUTH_EMAIL_SERVER is configured.
- *   - A development credentials shim, which refuses to load unless NODE_ENV is
- *     development AND AUTH_DEV_LOGIN=1. It still checks the allowlist, so it is
- *     a convenience for local work, not a way past the gate.
+ * Two providers — a Nodemailer magic link and a development credentials shim —
+ * and only the first ever runs in production. Which of them is switched on is
+ * not decided here: src/lib/signin-providers.ts owns that, because the sign-in
+ * page has to render exactly the providers this file registers. Do not restate
+ * the conditions here; a second copy of them is the thing that goes stale.
+ *
+ * The shim skips the mail server, not the gate — it still runs the allowlist.
  */
 
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
@@ -40,10 +42,12 @@ function providers(): Provider[] {
         name: 'Development sign-in',
         credentials: { email: { label: 'Email', type: 'email' } },
         authorize(credentials) {
-          const email = typeof credentials?.email === 'string' ? credentials.email : null;
-          // The allowlist still applies. This shim skips the mail server, not the gate.
-          if (!isAllowed(email)) return null;
-          return { id: email!, email: email!, name: email! };
+          const claimed = typeof credentials?.email === 'string' ? credentials.email : null;
+          // The allowlist still applies. This shim skips the mail server, not
+          // the gate: it proves nothing about who controls the address, so the
+          // list is the only thing standing between it and the rider names.
+          if (!isAllowed(claimed)) return null;
+          return { id: claimed!, email: claimed!, name: claimed! };
         },
       }),
     );
