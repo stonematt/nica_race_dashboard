@@ -16,7 +16,9 @@ Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain
 
 ## Brand
 
-Design system, logo, and voice live in the sibling repo `../scd-brand` (`scd-brand/DESIGN.md`, status APPROVED). Orange `#FF8000` leads and is used liberally; ink on orange, never white. Anton display / Nunito body. Mascot Milo. Read `DESIGN.md` before building any UI — it is not vendored into this repo.
+Read `docs/brand.md` before building any UI. It holds the rules that constrain code, the asset policy for this public repo, and the reskin procedure. Tokens are vendored into `src/app/globals.css`; `pnpm brand:check` diffs them against upstream.
+
+The source design system is `stonematt/scd-brand` (`DESIGN.md`, status APPROVED), which is **private** — do not point a contributor at it.
 
 ## Wayfinder
 
