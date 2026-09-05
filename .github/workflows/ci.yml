@@ -1,0 +1,93 @@
+# Every pull request gets checked, so a broken schema, an unformatted file, or —
+# the one that actually matters — a stray payload carrying a rider's name cannot
+# land on `dev`. Issue #28.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# NEVER ADD A SCHEDULED INGEST TO THIS REPOSITORY WHILE IT IS PUBLIC.
+#
+# `bin/fetch.ts` pulls live results from a volunteer-run nonprofit's timing
+# vendor, and those payloads carry minors' full names, schools, grades, plates
+# and finish times. A `schedule:` trigger — or any workflow that runs fetch,
+# normalize, seed, or the local-only test lane — would pull that data onto
+# GitHub's runners and into a public log. This was decided in #6 and reaffirmed
+# in #29; reopening it needs a fresh decision, not a pull request.
+#
+# For the same reason this workflow runs `pnpm test` and never `pnpm test:local`.
+# The local-only lane reads the real fixture corpus. See docs/fixtures.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+# Read-only. Nothing here comments, labels or pushes.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck · lint · format · test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm first: setup-node's pnpm cache needs the binary to exist before it
+      # can resolve the store path. Version comes from `packageManager`.
+      - uses: pnpm/action-setup@v4
+
+      # One runtime line, from .nvmrc, deliberately not a matrix. This app runs
+      # on one Node and testing others would be testing a claim nobody makes.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Before anything else, and before any dependency is fetched: is there
+      # payload-shaped data in the repository? .gitignore is a request and the
+      # pre-commit hook is local; this is the half that catches a clone which
+      # never had the hook, or a `git commit --no-verify`. See docs/fixtures.md.
+      - name: Privacy guard — payload-shaped data in the tree
+        run: node scripts/privacy-guard.ts
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm format:check
+
+      # The default lane only. `pnpm test:local` reads the real corpus and must
+      # never run here.
+      - run: pnpm test
+
+      # A schema edited without a migration is the failure that bites a year
+      # later, when nobody remembers. If `generate` produces anything, the
+      # committed migrations no longer describe the schema.
+      - name: Migration drift — schema and migrations agree
+        run: |
+          pnpm db:generate < /dev/null
+          if [ -n "$(git status --porcelain -- src/lib/db/migrations)" ]; then
+            echo "::error::src/lib/db/schema.ts has changes with no migration. Run 'pnpm db:generate' and commit the result."
+            git status --porcelain -- src/lib/db/migrations
+            git --no-pager diff -- src/lib/db/migrations
+            exit 1
+          fi
+          echo "no drift: the committed migrations describe the schema"
+
+      # PGlite is an npm dependency, so a fresh database is a fresh directory —
+      # no service container, no Postgres to stand up. This proves the
+      # migrations apply from nothing, which the test suite's in-memory
+      # databases do not: they never touch the on-disk driver path.
+      - name: Migrations apply to a fresh PGlite database
+        env:
+          DATABASE_URL: ${{ runner.temp }}/ci-pglite
+        run: node bin/migrate.ts
