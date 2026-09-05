@@ -25,6 +25,7 @@
  */
 
 import { IngestError } from './errors.ts';
+import { stripGroupOrdinal } from './rows.ts';
 
 /** A category string that does not resolve to one of the fourteen. */
 export class CategoryError extends IngestError {}
@@ -47,16 +48,6 @@ export interface NormalizedCategory {
   gender: Gender;
   /** Null at State Champs, which suffixes nothing. */
   conference: Conference | null;
-}
-
-/**
- * Strip the `#N_` ordinal the source prefixes onto every group key.
- *
- * The ordinal is presentation order within one payload and drifts between
- * events, so it is not part of the category.
- */
-export function stripGroupOrdinal(groupKey: string): string {
-  return groupKey.replace(/^#\d+_/, '');
 }
 
 /**
