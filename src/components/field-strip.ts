@@ -154,6 +154,18 @@ export function buildFieldStrip(
 }
 
 /**
+ * Why a field has no axis, in one sentence.
+ *
+ * It lives here rather than in the renderer because this module already owns
+ * the strip's prose, and because the sentence has two readers: it is the
+ * visible copy where the strip would have been, and it opens the description a
+ * screen reader gets. Two wordings of the same reason would drift, and a test
+ * asserting on a phrase would keep passing while they did.
+ */
+export const NO_AXIS_REASON =
+  'This race published no gap to the winner, so there is no axis to place riders on.';
+
+/**
  * The text a screen reader gets.
  *
  * The prototype conveyed everything through dot position and colour, which is
@@ -176,8 +188,8 @@ function describe(
    */
   if (max === null) {
     const parts = [
-      `No axis: this race published no gap to the winner, ` +
-        `so none of the ${marks.length} rider${marks.length === 1 ? '' : 's'} can be placed`,
+      `${NO_AXIS_REASON} None of the ${marks.length} ` +
+        `rider${marks.length === 1 ? '' : 's'} can be placed`,
     ];
     for (const mark of outside) {
       parts.push(`${mark.text}, not on the axis`);

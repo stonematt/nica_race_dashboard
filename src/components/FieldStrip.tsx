@@ -14,7 +14,12 @@
  * `@vitejs/plugin-react`, delete these two lines.
  */
 
-import { buildFieldStrip, type FieldMark, type OutsideMark } from './field-strip.ts';
+import {
+  buildFieldStrip,
+  NO_AXIS_REASON,
+  type FieldMark,
+  type OutsideMark,
+} from './field-strip.ts';
 
 /**
  * The app's core chart. One rider — or several — placed against a whole field
@@ -61,14 +66,13 @@ const inset = (x: number) => `${(4 + x * 92).toFixed(3)}%`;
  * The percentile and the place are unaffected and still on the card: this
  * removes a chart that meant nothing, not the information a coach came for.
  */
-function NoAxis({ description }: { description: string }) {
+function NoAxis() {
   return (
-    <p
-      className="border-border bg-surface text-muted rounded-md border px-3 py-2 text-[11px]"
-      // The strip's own sentence, so both readers get the same reason.
-      title={description}
-    >
-      This race published no gap to the winner, so there is no axis to place riders on.
+    // The strip's own sentence, from the module that owns its prose, so both
+    // readers get the same reason. Visible text is the accessible name here —
+    // no `title`, which an `<svg>` needs only because it has no text of its own.
+    <p className="border-border bg-surface text-muted rounded-md border px-3 py-2 text-[11px]">
+      {NO_AXIS_REASON}
     </p>
   );
 }
@@ -86,7 +90,7 @@ export function FieldStrip({ marks, outside = [], size = 'md', caption, max }: F
       ) : null}
 
       {model.max === null ? (
-        <NoAxis description={model.description} />
+        <NoAxis />
       ) : (
         <>
           <svg
@@ -97,11 +101,11 @@ export function FieldStrip({ marks, outside = [], size = 'md', caption, max }: F
             className="border-border bg-surface block rounded-md border"
           >
             {/*
-          Both, deliberately. `aria-label` wins the accessible name, so this
-          title is redundant for a screen reader — but it is what a browser
-          shows on hover, which is the only way a sighted reader gets the same
-          sentence. Neither alone covers both readers.
-        */}
+              Both, deliberately. `aria-label` wins the accessible name, so this
+              title is redundant for a screen reader — but it is what a browser
+              shows on hover, which is the only way a sighted reader gets the
+              same sentence. Neither alone covers both readers.
+            */}
             <title>{model.description}</title>
             <line
               x1="0"
