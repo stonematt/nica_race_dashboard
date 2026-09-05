@@ -2,9 +2,16 @@
  * The email allowlist. Per-coach accounts, not a shared password — the exact
  * mechanism the privacy review (issue #3) specified.
  *
- * This is the single gate. A provider proving someone controls an address does
- * not admit them; being on this list does. There is no bypass token, no demo
- * account, and no share link, by decision.
+ * A provider proving someone controls an address does not admit them; being on
+ * this list does. There is no bypass token, no demo account, and no share link,
+ * by decision.
+ *
+ * One exception exists and it is not reachable from a deployment: the
+ * development shim skips this list entirely (issue #33). It registers only
+ * under NODE_ENV=development with AUTH_DEV_LOGIN=1, and `pnpm dev` binds
+ * loopback, so what it admits people to is reachable from nowhere but the
+ * machine running it. src/lib/admission.ts owns that branch — this file knows
+ * nothing about it, and nothing here should grow a second one.
  *
  * Kept free of imports on purpose: it runs in the Edge runtime from
  * src/auth.config.ts, in Node from src/auth.ts, and under vitest with an

@@ -7,20 +7,23 @@
  * page has to render exactly the providers this file registers. Do not restate
  * the conditions here; a second copy of them is the thing that goes stale.
  *
- * The shim skips the mail server, not the gate — it still runs the allowlist.
+ * The shim skips both the mail server and the allowlist. That is only safe
+ * because `pnpm dev` binds loopback, so the instance it admits people to is
+ * reachable from nowhere but this machine; the two land together (issue #33).
+ * src/lib/admission.ts owns that branch — this file only registers providers.
  */
 
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
-import NextAuth from 'next-auth';
+import NextAuth, { type NextAuthConfig } from 'next-auth';
 import type { Provider } from 'next-auth/providers';
 import Credentials from 'next-auth/providers/credentials';
 import Nodemailer from 'next-auth/providers/nodemailer';
 import { authConfig } from './auth.config.ts';
 import { createDb, schema } from './lib/db/index.ts';
-import { isAllowed } from './lib/allowlist.ts';
+import { admits, DEV_PROVIDER_ID } from './lib/admission.ts';
 import { availableProviders } from './lib/signin-providers.ts';
 
-function providers(): Provider[] {
+export function providers(): Provider[] {
   const list: Provider[] = [];
   // The sign-in page renders its forms from this same function, so a form can
   // never be offered for a provider that was not registered here.
@@ -38,16 +41,20 @@ function providers(): Provider[] {
   if (dev) {
     list.push(
       Credentials({
-        id: 'dev',
+        id: DEV_PROVIDER_ID,
         name: 'Development sign-in',
         credentials: { email: { label: 'Email', type: 'email' } },
         authorize(credentials) {
-          const claimed = typeof credentials?.email === 'string' ? credentials.email : null;
-          // The allowlist still applies. This shim skips the mail server, not
-          // the gate: it proves nothing about who controls the address, so the
-          // list is the only thing standing between it and the rider names.
-          if (!isAllowed(claimed)) return null;
-          return { id: claimed!, email: claimed!, name: claimed! };
+          // Any address, no allowlist and no proof of controlling it. What
+          // stands in front of the rider names here is the loopback bind, not
+          // this function — see src/lib/admission.ts. Registration is still
+          // double-gated on NODE_ENV and AUTH_DEV_LOGIN above.
+          // Normalised the same way the allowlist normalises, so signing in
+          // as Coach@x and coach@x does not leave two user rows behind.
+          const claimed =
+            typeof credentials?.email === 'string' ? credentials.email.trim().toLowerCase() : '';
+          if (!claimed) return null;
+          return { id: claimed, email: claimed, name: claimed };
         },
       }),
     );
@@ -58,7 +65,13 @@ function providers(): Provider[] {
 
 const db = createDb();
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+/**
+ * Exported so the callbacks can be tested against the real object rather than a
+ * copy of it. The wiring is the load-bearing part — `signIn` forwarding
+ * `account` is what makes the shim's branch reachable at all, and a test that
+ * only exercises src/lib/admission.ts stays green when that wire is cut.
+ */
+export const authOptions = {
   ...authConfig,
   adapter: DrizzleAdapter(db, {
     usersTable: schema.users,
@@ -69,9 +82,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: providers(),
   callbacks: {
     ...authConfig.callbacks,
-    /** Last line of defence: a provider can prove an address, only this admits it. */
-    signIn({ user }) {
-      return isAllowed(user?.email);
+    /**
+     * Last line of defence: a provider can prove an address, only this admits
+     * it — with exactly one branch, the development shim, which is admitted on
+     * the provider's identity instead. Every other provider runs the allowlist.
+     */
+    signIn({ user, account }) {
+      return admits(account?.provider, user);
     },
   },
-});
+} satisfies NextAuthConfig;
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);

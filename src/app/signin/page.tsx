@@ -1,12 +1,14 @@
 import { signIn } from '@/auth.ts';
 import { Banner } from '@/components/Banner.tsx';
+import { DEV_PROVIDER_ID } from '@/lib/admission.ts';
 import { availableProviders } from '@/lib/signin-providers.ts';
 
 /**
  * The one route outside the gate, and the only one. It offers exactly the
  * providers src/auth.ts actually registered: the magic link when a mail server
  * is configured, and the development shim when it is explicitly switched on.
- * Both still run through the allowlist — this page renders a door, not a key.
+ * The magic link runs through the allowlist; the shim does not, and says so —
+ * this page renders a door, not a key.
  */
 
 /**
@@ -86,14 +88,17 @@ export default async function SignIn({
           <form
             action={async (formData: FormData) => {
               'use server';
-              await signIn('dev', { email: formData.get('email'), redirectTo });
+              await signIn(DEV_PROVIDER_ID, { email: formData.get('email'), redirectTo });
             }}
             className="border-border mt-8 border-t pt-8"
           >
             <label htmlFor="dev-email" className="block text-sm font-semibold">
               Development sign-in
             </label>
-            <p className="text-muted mt-1 text-xs">No mail server. The allowlist still applies.</p>
+            <p className="text-muted mt-1 text-xs">
+              No mail server and no allowlist — any address signs in. This server is bound to
+              localhost, which is what makes that safe.
+            </p>
             <input
               id="dev-email"
               name="email"
