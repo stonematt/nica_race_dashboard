@@ -1,19 +1,24 @@
 /*
- * Brand tokens, bound from ../scd-brand/DESIGN.md (status APPROVED).
+ * Brand tokens, vendored from the sibling repo `stonematt/scd-brand` at commit
+ * 25c5f87 (`DESIGN.md`, status APPROVED).
  *
- * Values are copied character-exact and must not be re-derived: DESIGN.md is
- * the single source, and its README says so outright. How this copy stays in
- * sync with the sibling repo — submodule, package, or a drift check — is still
- * open on issue #13; until that lands, this block is a deliberate hand copy and
- * the only thing keeping it honest is this comment.
+ * Vendored by copy, deliberately: `scd-brand` is **private** and this repo is
+ * **public**, so a git submodule would fail for every clone that is not the
+ * owner's — CI included. See `docs/brand.md` for the full reasoning, the drift
+ * procedure, and how to reskin this app for another club.
+ *
+ * Values are DESIGN.md's, compared by **normalized value, not by character**:
+ * Prettier rewrites this copy (it already turned DESIGN.md's `0.20` into `0.2`
+ * below), so textual identity is not a property this file can hold. Run
+ * `pnpm brand:check` to diff the two; it skips when the sibling repo is absent.
  *
  * Tailwind 4's @theme *is* CSS custom properties and takes OKLch natively, so
  * there is no token build step (issue #6). Names are namespaced as Tailwind 4
- * requires (--color-*, --font-*); the values are DESIGN.md's, untouched.
+ * requires (--color-*, --font-*).
  *
- * Fonts are declared as stacks only. Whether Anton and Nunito arrive via
- * next/font or a CDN link is issue #13's call, so nothing here loads a face —
- * until it does, the fallbacks render.
+ * The `--font-*` stacks are DESIGN.md's, prefixed with the `next/font` face
+ * variables that `layout.tsx` self-hosts. `brand:check` strips that prefix
+ * before comparing. Issue #13.
  */
 
 @import 'tailwindcss';
@@ -33,8 +38,9 @@
   --color-warn: oklch(78% 0.14 75);
   --color-danger: oklch(58% 0.2 28);
 
-  --font-display: 'Anton', 'Oswald', Impact, sans-serif;
-  --font-body: 'Nunito', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: var(--font-display-face), 'Anton', 'Oswald', Impact, sans-serif;
+  --font-body:
+    var(--font-body-face), 'Nunito', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 @layer base {

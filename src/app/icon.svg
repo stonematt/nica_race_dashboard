@@ -1,7 +1,12 @@
 <!--
-  A tab icon, not the mark. The Descenders logo art lives in ../scd-brand and
-  whether it may be committed to this public repo is issue #13's call, so this
-  is an original placeholder in the brand colours: a descending line on navy.
+  A tab icon, not the mark — original work in the brand colours: a descending
+  line on navy.
+
+  The real mark may be committed here (issue #13: it is the club's own, and
+  already public on scdescenders.com), but it is a 2166x2550 raster with no
+  alpha channel, which would render as a white box on this navy ground. Replace
+  this with an SVG traced from ../scd-brand's .ai source if that becomes worth
+  doing. See docs/brand.md.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <rect width="32" height="32" rx="6" fill="#405C80" />

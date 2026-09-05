@@ -22,7 +22,8 @@
     "db:studio": "drizzle-kit studio",
     "seed": "node bin/seed.ts",
     "fetch": "node bin/fetch.ts",
-    "normalize": "node bin/normalize.ts"
+    "normalize": "node bin/normalize.ts",
+    "brand:check": "node bin/brand-check.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
