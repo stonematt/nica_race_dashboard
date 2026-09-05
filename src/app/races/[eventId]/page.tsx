@@ -18,9 +18,11 @@ import { loadRaceDetail } from './query.ts';
  * request before this file runs, and the session read below is for display and
  * for resolving which coach is asking, not a second gate.
  *
- * `no-store` because the page renders minors' names: nothing about it should
- * sit in a cache, here or in front of it (issue #3, and the headers in
- * `next.config.ts` say the same thing at the response).
+ * `force-dynamic` because the page reads a database and a session: rendered
+ * once at build time it would either fail with no `DATABASE_URL` or, worse,
+ * bake one coach's view of minors' names into a static file. `next.config.ts`
+ * separately sends `Cache-Control: no-store` so nothing in front of the app
+ * stores the response either (issue #3).
  */
 export const dynamic = 'force-dynamic';
 

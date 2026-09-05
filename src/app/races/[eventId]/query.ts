@@ -68,6 +68,9 @@ export type RaceDetail = {
 
 type Row = Record<string, unknown>;
 
+/** `db.execute` types its rows loosely; every read here narrows them the same way. */
+const rowsOf = (result: { rows: unknown[] }): Row[] => result.rows as Row[];
+
 const str = (v: unknown): string => String(v ?? '');
 const num = (v: unknown): number => Number(v);
 const numOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
@@ -92,7 +95,6 @@ function splits(row: Row): { lapSplits: string[]; lapSeconds: number[] } {
 function toResultRow(row: Row): RaceResultRow {
   return {
     plate: str(row.plate),
-    displayName: str(row.display_name),
     category: str(row.category),
     place: str(row.place),
     status: row.status === 'dnf' ? 'dnf' : 'finished',
@@ -117,7 +119,7 @@ export async function listRaces(db: AnyDatabase): Promise<RaceHeader[]> {
       from v_race_result
      order by season_year desc, round_ordinal desc, source_event_id desc`);
 
-  return (result.rows as Row[]).map((row) => ({
+  return rowsOf(result).map((row) => ({
     eventId: num(row.event_id),
     sourceEventId: str(row.source_event_id),
     name: str(row.event_name),
@@ -143,12 +145,12 @@ export async function resolveClub(
     const owned = await db.execute(sql`
       select c.id, c.name from coach co join club c on c.id = co.club_id
        where co.user_id = ${userId} limit 1`);
-    const row = (owned.rows as Row[])[0];
+    const row = rowsOf(owned)[0];
     if (row) return { id: num(row.id), name: str(row.name) };
   }
 
   const only = await db.execute(sql`select id, name from club order by id limit 2`);
-  const rows = only.rows as Row[];
+  const rows = rowsOf(only);
   return rows.length === 1 ? { id: num(rows[0]!.id), name: str(rows[0]!.name) } : null;
 }
 
@@ -172,13 +174,13 @@ async function squadNames(
         join squad_coach sc on sc.squad_id = s.id
        where sc.user_id = ${userId} and s.club_id = ${clubId}
        order by s.name`);
-    const rows = mine.rows as Row[];
+    const rows = rowsOf(mine);
     if (rows.length > 0) return rows.map((row) => ({ id: num(row.id), name: str(row.name) }));
   }
 
   const all = await db.execute(sql`
     select id, name from squad where club_id = ${clubId} order by name`);
-  return (all.rows as Row[]).map((row) => ({ id: num(row.id), name: str(row.name) }));
+  return rowsOf(all).map((row) => ({ id: num(row.id), name: str(row.name) }));
 }
 
 /** One race, assembled: the field, the squads drawn against it, the warning. */
@@ -189,7 +191,7 @@ export async function loadRaceDetail(
 ): Promise<RaceDetail | null> {
   const fieldResult = await db.execute(sql`
     select * from v_race_result where source_event_id = ${sourceEventId}`);
-  const fieldRows = fieldResult.rows as Row[];
+  const fieldRows = rowsOf(fieldResult);
   if (fieldRows.length === 0) return null;
 
   const first = fieldRows[0]!;
@@ -219,7 +221,7 @@ export async function loadRaceDetail(
      where rr.event_id = ${race.eventId} and s.club_id = ${club.id}`);
 
   const bySquad = new Map<number, { row: RaceResultRow; name: string }[]>();
-  for (const row of memberResult.rows as Row[]) {
+  for (const row of rowsOf(memberResult)) {
     const squadId = num(row.squad_id);
     const entry = { row: toResultRow(row), name: str(row.rider_name) };
     const existing = bySquad.get(squadId);
@@ -238,7 +240,7 @@ export async function loadRaceDetail(
     squads: squads.map((squad) =>
       buildSquadCard(squad.name, bySquad.get(squad.id) ?? [], byCategory),
     ),
-    unmapped: (unmappedResult.rows as Row[]).map((row) => ({
+    unmapped: rowsOf(unmappedResult).map((row) => ({
       plate: str(row.plate),
       name: str(row.display_name),
       scoringTeam: str(row.scoring_team),

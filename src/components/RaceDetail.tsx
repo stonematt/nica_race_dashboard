@@ -21,7 +21,6 @@ const CHIP_TONE: Record<Chip['tone'], string> = {
   lapped: 'bg-navy text-white',
   // Orange is a highlight, never a field — and ink on orange, never white.
   good: 'bg-accent on-accent',
-  quiet: 'border-border text-muted border',
 };
 
 function Chips({ chips }: { chips: readonly Chip[] }) {

@@ -81,6 +81,57 @@ describe('the axis', () => {
   });
 });
 
+describe('the shapes the other two views will pass', () => {
+  it('marks several riders in one strip — club vs league', () => {
+    // That view draws one strip per category with every club member marked, so
+    // "ours" has to be a property of a mark rather than a single highlighted
+    // rider. Race detail happens to pass exactly one; nothing here requires it.
+    const model = buildFieldStrip([
+      { pct: 0, ours: false },
+      { pct: 4, ours: true, label: '«RIDER-A»' },
+      { pct: 12, ours: true, label: '«RIDER-B»' },
+      { pct: 30, ours: false },
+      { pct: 41, ours: true, label: '«RIDER-C»' },
+    ]);
+
+    expect(model.dots.filter((dot) => dot.ours)).toHaveLength(3);
+    // All three still paint over the field, and each is named in the
+    // description rather than only the first.
+    expect(model.dots.slice(2).every((dot) => dot.ours)).toBe(true);
+    expect(model.description).toContain('«RIDER-A» at +4% back');
+    expect(model.description).toContain('«RIDER-C» at +41% back');
+  });
+
+  it('takes a shared ceiling so two strips can be compared — rider detail', () => {
+    // One strip per race a rider started, stacked. Left to size themselves each
+    // would use its own axis and a rider's line would wander for reasons that
+    // are about the field rather than about them, so a caller can fix the
+    // ceiling across the set.
+    const raceOne = buildFieldStrip(
+      [
+        { pct: 0, ours: false },
+        { pct: 8, ours: true },
+      ],
+      [],
+      60,
+    );
+    const raceTwo = buildFieldStrip(
+      [
+        { pct: 0, ours: false },
+        { pct: 55, ours: true },
+      ],
+      [],
+      60,
+    );
+
+    expect(raceOne.max).toBe(60);
+    expect(raceTwo.max).toBe(60);
+    // The same percentage lands in the same place in both, which is the point.
+    expect(raceOne.dots[1]!.x).toBeCloseTo(8 / 60, 6);
+    expect(raceTwo.dots[1]!.x).toBeCloseTo(55 / 60, 6);
+  });
+});
+
 describe('paint order', () => {
   it('emits our marks last, because SVG has no z-index', () => {
     const model = buildFieldStrip([

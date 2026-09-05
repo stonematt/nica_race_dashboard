@@ -68,6 +68,12 @@ export function FieldStrip({ marks, outside = [], size = 'md', caption, max }: F
         height={g.height}
         className="border-border bg-surface block rounded-md border"
       >
+        {/*
+          Both, deliberately. `aria-label` wins the accessible name, so this
+          title is redundant for a screen reader — but it is what a browser
+          shows on hover, which is the only way a sighted reader gets the same
+          sentence. Neither alone covers both readers.
+        */}
         <title>{model.description}</title>
         <line
           x1="0"

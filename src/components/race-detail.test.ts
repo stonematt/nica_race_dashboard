@@ -26,7 +26,6 @@ import {
 function row(over: Partial<RaceResultRow> = {}): RaceResultRow {
   return {
     plate: '974',
-    displayName: '«RIDER-A»',
     category: 'HS1 Boys',
     place: '1',
     status: 'finished',

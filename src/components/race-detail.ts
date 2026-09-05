@@ -36,7 +36,6 @@ import type { FieldMark, OutsideMark } from './field-strip.ts';
  */
 export type RaceResultRow = {
   plate: string;
-  displayName: string;
   category: string;
   /** Verbatim. `*` or `DNF` for a non-finisher — never rewritten. */
   place: string;
@@ -73,7 +72,7 @@ export type LapDisplay =
   | { kind: 'value'; label: string; value: string }
   | { kind: 'bars'; bars: { label: string; seconds: number; height: number; best: boolean }[] };
 
-export type Chip = { text: string; tone: 'lapped' | 'dnf' | 'quiet' | 'good' };
+export type Chip = { text: string; tone: 'lapped' | 'dnf' | 'good' };
 
 export type RiderCard = {
   plate: string;

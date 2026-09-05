@@ -23,7 +23,6 @@ import { buildSquadCard, categoryMarks, type RaceResultRow } from './race-detail
 function row(over: Partial<RaceResultRow> = {}): RaceResultRow {
   return {
     plate: '974',
-    displayName: '«RIDER-A»',
     category: 'HS1 Boys',
     place: '1',
     status: 'finished',
@@ -150,6 +149,38 @@ describe('the field strip', () => {
     );
     // Four starters, two of them unplaceable.
     expect(markup.match(/<circle/g)).toHaveLength(2);
+  });
+
+  it('stands on its own at md, and sits inside a card at sm', () => {
+    // Race detail only ever asks for `sm`. `md` is what rider detail and
+    // club-vs-league will stack, so it is drawn here rather than left to be
+    // discovered broken by the view that first needs it.
+    const marks = [
+      { pct: 0, ours: false },
+      { pct: 12, ours: true, label: '«RIDER-A»' },
+    ];
+    const md = renderToStaticMarkup(<FieldStrip marks={marks} size="md" />);
+    const sm = renderToStaticMarkup(<FieldStrip marks={marks} size="sm" />);
+
+    expect(md).toContain('height="56"');
+    expect(sm).toContain('height="34"');
+    // Both draw the same two riders; only the geometry changes.
+    expect(md.match(/<circle/g)).toHaveLength(2);
+    expect(sm.match(/<circle/g)).toHaveLength(2);
+  });
+
+  it('marks every club member when a view passes more than one', () => {
+    const markup = renderToStaticMarkup(
+      <FieldStrip
+        size="md"
+        marks={[
+          { pct: 0, ours: false },
+          { pct: 4, ours: true, label: '«RIDER-A»' },
+          { pct: 22, ours: true, label: '«RIDER-B»' },
+        ]}
+      />,
+    );
+    expect(markup.match(/fill-accent/g)).toHaveLength(2);
   });
 
   it('carries a text description for a reader that cannot see it', () => {
