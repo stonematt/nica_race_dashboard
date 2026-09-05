@@ -72,7 +72,16 @@ console.log(`[install-git-hooks] core.hooksPath -> ${HOOKS_PATH}`);
 const hooksDir = join(dirname(dirname(fileURLToPath(import.meta.url))), HOOKS_PATH);
 for (const hook of HOOKS) {
   const path = join(hooksDir, hook);
-  if (!existsSync(path)) continue;
+  if (!existsSync(path)) {
+    // core.hooksPath now points at a directory with no hook in it, which looks
+    // exactly like a working install and blocks nothing. Say so.
+    warn(
+      `core.hooksPath is set, but ${HOOKS_PATH}/${hook} is missing — ` +
+        'nothing is blocking fixture payloads from being committed. ' +
+        'Check out the file or reinstall. See docs/fixtures.md.',
+    );
+    continue;
+  }
   const mode = statSync(path).mode;
   if ((mode & 0o111) !== 0o111) {
     chmodSync(path, mode | 0o755);

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Refuse any commit that stages a path under fixtures/.
+# Refuse any commit that stages a fixture payload.
 #
 # This repository is public and the RaceResult payloads carry minors' full
 # names, schools, grades, plates and finish times. The corpus lives in the tree
@@ -9,6 +9,14 @@
 #
 # .gitignore is a request and `git add -f` overrides it. This reads the index,
 # so it catches the forced add too — by then the payload is staged either way.
+#
+# Two checks, because a path check alone has an obvious hole: staging a payload
+# under fixtures/, and staging one that was renamed OUT of fixtures/ in the same
+# commit. A payload *copied* to a new path carries no rename record and gets
+# past both — that is the shape-level guard's job in CI (issue #28), not a path
+# check's. Say so out loud rather than implying this hook is airtight.
+#
+# Fails closed: if git cannot be asked what is staged, the commit is refused.
 #
 # Installed by `pnpm install` (scripts/install-git-hooks.mjs sets
 # core.hooksPath). POSIX sh with no dependencies on purpose: it has to run
@@ -20,9 +28,21 @@ set -eu
 # --diff-filter=ACMR: additions, copies, modifications, renames. A staged
 # deletion of a payload that somehow reached history is exactly what someone
 # cleaning up needs to be able to commit.
-staged=$(git diff --cached --name-only --diff-filter=ACMR -- ':(top)fixtures' || true)
+if ! staged=$(git diff --cached --name-only --diff-filter=ACMR -- ':(top)fixtures'); then
+  echo 'pre-commit: could not read the index; refusing to commit.' >&2
+  exit 1
+fi
 
-if [ -z "$staged" ]; then
+# Rename detection is off by default for --name-only, so ask for it explicitly.
+# `git mv fixtures/2025/x.json notes.json` stages the payload's bytes at a path
+# the check above never looks at.
+if ! renamed=$(git diff --cached --name-status --find-renames --diff-filter=R |
+  awk -F'\t' '$2 ~ /^fixtures\// { print $2 " -> " $3 }'); then
+  echo 'pre-commit: could not read the index; refusing to commit.' >&2
+  exit 1
+fi
+
+if [ -z "$staged" ] && [ -z "$renamed" ]; then
   exit 0
 fi
 
@@ -30,7 +50,12 @@ fi
   echo
   echo '  BLOCKED: this commit stages fixture payloads.'
   echo
-  printf '%s\n' "$staged" | sed 's/^/    /'
+  if [ -n "$staged" ]; then
+    printf '%s\n' "$staged" | sed 's/^/    /'
+  fi
+  if [ -n "$renamed" ]; then
+    printf '%s\n' "$renamed" | sed 's/^/    renamed out of the corpus: /'
+  fi
   echo
   echo "  This repository is public and these payloads carry minors' full names,"
   echo '  schools, grades, plates and finish times. Nothing under fixtures/ is ever'

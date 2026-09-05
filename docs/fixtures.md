@@ -67,13 +67,23 @@ with a mechanical one, not with discipline:
 
 - `.gitignore` carries `fixtures/`, which stops an ordinary `git add`
 - `scripts/git-hooks/pre-commit` reads the **index** and rejects any commit that stages a
-  path under `fixtures/`. Because it reads the index, `git add -f` does not get past it
+  path under `fixtures/`, or renames one out of it. Because it reads the index, `git add -f`
+  does not get past it, and it fails closed if it cannot read the index at all
 - `pnpm install` runs `scripts/install-git-hooks.mjs`, which points `core.hooksPath` at
   `scripts/git-hooks`. A fresh clone is armed by its first install, with no setup step
 
 If you already have a `core.hooksPath` of your own, the installer says so and leaves it
 alone — the block is then **not** active, and you should chain
 `scripts/git-hooks/pre-commit` from your own hook.
+
+**What the hook does not catch, and why that is fine.** It is a path check, so a payload
+whose bytes are _copied_ to some path outside `fixtures/` carries nothing for it to match
+on. Closing that needs a shape-level check — does this file look like a RaceResult
+payload — which is the CI privacy guard in
+[#28](https://github.com/stonematt/nica_race_dashboard/issues/28), running on every pull
+request. The hook is the local half and the guard is the remote half: the hook stops the
+commit, the guard catches a hook that was bypassed with `--no-verify` or never installed.
+Neither is the whole defence on its own, and neither is claimed to be.
 
 Anything derived from these payloads that _does_ get committed — schema notes, worked
 examples, test fixtures — must have rider names redacted first. The pattern used in the

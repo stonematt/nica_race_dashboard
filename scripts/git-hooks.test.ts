@@ -152,6 +152,33 @@ describe('the pre-commit hook', () => {
     expect(commit.status).toBe(0);
   });
 
+  it('rejects a payload renamed out of the corpus in the same commit', async () => {
+    const dir = await scratchRepo();
+    // The hole a path check has: `git mv fixtures/x.json notes.json` stages the
+    // payload's bytes at a path nothing under fixtures/ would ever match.
+    git(dir, 'add', '-f', PAYLOAD);
+    git(dir, 'commit', '--no-verify', '-m', 'the mistake');
+    git(dir, 'mv', PAYLOAD, 'notes.json');
+
+    const commit = git(dir, 'commit', '-m', 'launder it out of fixtures/');
+
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain('renamed out of the corpus');
+  });
+
+  it('fails closed when it cannot read the index', async () => {
+    const dir = await scratchRepo();
+    // A hook that exits 0 on an unexpected git error is a hook that waves the
+    // payload through on the one day something is wrong.
+    const run = spawnSync('sh', [join(dir, HOOKS_PATH, 'pre-commit')], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { ...ISOLATED_GIT_ENV, GIT_INDEX_FILE: '/dev/null/nope' },
+    });
+
+    expect(run.status).not.toBe(0);
+  });
+
   it('guards the directory the resolver actually reads', () => {
     // If CORPUS_DIRNAME ever moves, this fails rather than the hook silently
     // guarding a path nothing uses.
