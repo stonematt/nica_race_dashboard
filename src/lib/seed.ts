@@ -1,4 +1,13 @@
 /**
+ * Seeding: the two hand-maintained things a fresh database needs.
+ *
+ * `seedAdmin` bootstraps the first coach who can sign in. `seedClubConfig`
+ * writes the club's own facts — club, scoring teams, roster, plate mappings and
+ * squads — from the checked-in config file that `src/lib/club-config.ts` reads
+ * and validates. Both are idempotent and neither is ever run by ingest.
+ *
+ * ---
+ *
  * Seed the first admin: a club, a next-auth user, and the coach profile that
  * ties them together.
  *
@@ -23,12 +32,14 @@
  * first coach who can get in, not a permission level.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import { isAllowed, type AllowlistEnv } from './allowlist.ts';
+import type { ClubConfig } from './club-config.ts';
 import * as schema from './db/schema.ts';
 
 type Db = PgliteDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export interface SeedAdminOptions {
   email: string;
@@ -103,4 +114,198 @@ export async function seedAdmin(db: Db, options: SeedAdminOptions): Promise<Seed
   await db.insert(schema.coach).values({ userId: user!.id, clubId, displayName });
 
   return { userId: user!.id, clubId, email, displayName, clubName, created: true };
+}
+
+/* ============================================================================
+ * Club config — the hand-maintained half
+ * ========================================================================= */
+
+export interface SeedClubResult {
+  clubId: number;
+  seasonId: number;
+  scoringTeams: number;
+  riders: number;
+  /** Rider rows this run had to create, so the CLI can say what changed. */
+  ridersCreated: number;
+  plates: number;
+  squads: number;
+  squadMembers: number;
+}
+
+/**
+ * Write a validated club config into the database.
+ *
+ * The config file is the source of truth, so the three tables that are pure
+ * projections of it — `club_scoring_team`, `rider_plate` and `squad_member` —
+ * are replaced within their scope rather than merged into. A mapping the coach
+ * deleted has to actually disappear, or the unmapped-rider warning goes on
+ * quietly resolving a plate to the wrong person. The identity rows themselves —
+ * `club`, `rider`, `squad` — are only ever created or renamed, never deleted:
+ * dropping a rider row cascades their squad membership away, and that is a
+ * decision a config edit should not make on its own.
+ *
+ * **How a rider is recognised on a second run.** The schema gives `rider` no
+ * external key — only an id, a display name and free-text notes — so identity
+ * has to be anchored on something the config also carries. That is the plate
+ * mapping: a config rider is the existing rider holding any of the same plates
+ * over an overlapping window in that season. Bounds are part of the match on
+ * purpose, so a reissued plate splitting across two people does not collapse
+ * them into one rider. A rider whose every plate changed at once is
+ * indistinguishable from a new rider and seeds as one; the old roster row is
+ * left standing rather than guessed at.
+ *
+ * The season row is created if missing. It carries a year and nothing else —
+ * making config wait on an ingest to supply one would couple the two halves in
+ * exactly the way keeping them apart is meant to prevent.
+ */
+export async function seedClubConfig(db: Db, config: ClubConfig): Promise<SeedClubResult> {
+  return db.transaction(async (tx) => {
+    const seasonId = await upsertSeason(tx, config.season);
+    const clubId = await upsertClub(tx, config.club);
+
+    await tx
+      .delete(schema.clubScoringTeam)
+      .where(
+        and(
+          eq(schema.clubScoringTeam.clubId, clubId),
+          eq(schema.clubScoringTeam.seasonId, seasonId),
+        ),
+      );
+    if (config.scoringTeams.length > 0) {
+      await tx
+        .insert(schema.clubScoringTeam)
+        .values(config.scoringTeams.map((scoringTeam) => ({ clubId, seasonId, scoringTeam })));
+    }
+
+    const riderIds = new Map<string, number>();
+    let ridersCreated = 0;
+    let plates = 0;
+
+    for (const rider of config.riders) {
+      const existingId = await findRiderByPlates(tx, seasonId, rider.plates);
+      let riderId: number;
+      if (existingId === null) {
+        const [row] = await tx
+          .insert(schema.rider)
+          .values({ displayName: rider.displayName })
+          .returning({ id: schema.rider.id });
+        riderId = row!.id;
+        ridersCreated += 1;
+      } else {
+        riderId = existingId;
+        await tx
+          .update(schema.rider)
+          .set({ displayName: rider.displayName })
+          .where(eq(schema.rider.id, riderId));
+      }
+      riderIds.set(rider.key, riderId);
+
+      await tx
+        .delete(schema.riderPlate)
+        .where(
+          and(eq(schema.riderPlate.riderId, riderId), eq(schema.riderPlate.seasonId, seasonId)),
+        );
+      await tx.insert(schema.riderPlate).values(
+        rider.plates.map((binding) => ({
+          riderId,
+          seasonId,
+          plate: binding.plate,
+          fromRoundOrdinal: binding.fromRound,
+          toRoundOrdinal: binding.toRound,
+        })),
+      );
+      plates += rider.plates.length;
+    }
+
+    let squadMembers = 0;
+    for (const squad of config.squads) {
+      const squadId = await upsertSquad(tx, clubId, squad.name);
+      await tx.delete(schema.squadMember).where(eq(schema.squadMember.squadId, squadId));
+      if (squad.members.length > 0) {
+        await tx
+          .insert(schema.squadMember)
+          .values(squad.members.map((key) => ({ squadId, riderId: riderIds.get(key)! })));
+      }
+      squadMembers += squad.members.length;
+    }
+
+    return {
+      clubId,
+      seasonId,
+      scoringTeams: config.scoringTeams.length,
+      riders: config.riders.length,
+      ridersCreated,
+      plates,
+      squads: config.squads.length,
+      squadMembers,
+    };
+  });
+}
+
+async function upsertSeason(tx: Tx, year: number): Promise<number> {
+  const existing = await tx.select().from(schema.season).where(eq(schema.season.year, year));
+  if (existing[0]) return existing[0].id;
+  const [row] = await tx.insert(schema.season).values({ year }).returning({ id: schema.season.id });
+  return row!.id;
+}
+
+async function upsertClub(tx: Tx, name: string): Promise<number> {
+  const existing = await tx.select().from(schema.club).where(eq(schema.club.name, name));
+  if (existing[0]) return existing[0].id;
+  const [row] = await tx.insert(schema.club).values({ name }).returning({ id: schema.club.id });
+  return row!.id;
+}
+
+async function upsertSquad(tx: Tx, clubId: number, name: string): Promise<number> {
+  const existing = await tx
+    .select()
+    .from(schema.squad)
+    .where(and(eq(schema.squad.clubId, clubId), eq(schema.squad.name, name)));
+  if (existing[0]) return existing[0].id;
+  const [row] = await tx
+    .insert(schema.squad)
+    .values({ clubId, name })
+    .returning({ id: schema.squad.id });
+  return row!.id;
+}
+
+/**
+ * The rider already holding one of these plates over an overlapping window.
+ * Null when there is none. Windows have to overlap, not merely share a plate:
+ * a plate reissued mid-season is two riders and must stay two riders.
+ */
+async function findRiderByPlates(
+  tx: Tx,
+  seasonId: number,
+  plates: { plate: string; fromRound: number | null; toRound: number | null }[],
+): Promise<number | null> {
+  if (plates.length === 0) return null;
+  const rows = await tx
+    .select()
+    .from(schema.riderPlate)
+    .where(
+      and(
+        eq(schema.riderPlate.seasonId, seasonId),
+        inArray(
+          schema.riderPlate.plate,
+          plates.map((p) => p.plate),
+        ),
+      ),
+    );
+
+  const matches = rows.filter((row) =>
+    plates.some(
+      (p) =>
+        p.plate === row.plate &&
+        (p.fromRound ?? Number.NEGATIVE_INFINITY) <=
+          (row.toRoundOrdinal ?? Number.POSITIVE_INFINITY) &&
+        (row.fromRoundOrdinal ?? Number.NEGATIVE_INFINITY) <=
+          (p.toRound ?? Number.POSITIVE_INFINITY),
+    ),
+  );
+
+  if (matches.length === 0) return null;
+  // A merge — one config rider over what used to be two — resolves to the lower
+  // id, and the row it leaves behind keeps its roster entry and loses its plates.
+  return Math.min(...matches.map((row) => row.riderId));
 }
