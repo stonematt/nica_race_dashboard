@@ -18,25 +18,26 @@
  *      events; where it is absent the count is recovered by counting splits,
  *      which was verified to agree exactly at every event carrying both.
  *
- * Everything else refuses. A required field that does not resolve, two aliases
- * for one field, a row that is not `DataFields` wide, a decoded count that
- * disagrees with the published footer, an unrecognized expression — each throws
- * before a single row is written.
+ * Everything else refuses. The refusals every family shares live in rows.ts.
  */
 
 import { normalizeCategory, type Conference, type Gender, type GradeBand } from './category.ts';
-import { readColumnLayout, type ColumnLayout, type DisplayField } from './columns.ts';
-import { IngestError } from './errors.ts';
+import type { ColumnLayout } from './columns.ts';
+import { INDIVIDUAL_FLAT, type LayoutVariant } from './families.ts';
 import {
-  INDIVIDUAL_FLAT_ALIASES,
-  INDIVIDUAL_FLAT_IGNORED,
-  INDIVIDUAL_FLAT_REQUIRED,
-  type IndividualField,
-  type LayoutVariant,
-} from './families.ts';
-
-/** A payload that cannot be decoded faithfully. Refuse to write. */
-export class DecodeError extends IngestError {}
+  cellReader,
+  checkExpressionsRecognized,
+  checkRowCount,
+  checkUniqueKey,
+  DecodeError,
+  groupedRows,
+  parseIntOrRefuse,
+  readListLayout,
+  resolveFamilyFields,
+  type DecodedList,
+  type FieldColumns,
+  type ListPayload,
+} from './rows.ts';
 
 /** `finished` or `dnf`. See `status` below for why `lapped` is not written. */
 export type ResultStatus = 'finished' | 'dnf';
@@ -66,90 +67,6 @@ export interface IndividualRow {
   ptsLeader: boolean;
 }
 
-export interface DecodedList {
-  variant: LayoutVariant;
-  /** `DataFields` verbatim — the snapshot's record of this event's layout. */
-  expressions: readonly string[];
-  /** The `ListFooterText` count, when the source published one. */
-  publishedCount: number | null;
-  rows: IndividualRow[];
-}
-
-/** The parts of a list payload a decode reads. */
-export interface ListPayload {
-  list?: { ListName?: unknown; ListFooterText?: unknown; Fields?: unknown };
-  DataFields?: unknown;
-  data?: unknown;
-}
-
-/**
- * How many levels of grouping sit above the rows.
- *
- * The flat individual list is 1 — grouped by category and nothing else. By-Team
- * and `Team Results - Detailed` are 3. Depth is part of a family's identity,
- * so it is measured rather than assumed.
- */
-export function dataDepth(data: unknown): number {
-  if (Array.isArray(data)) return 0;
-  if (data === null || typeof data !== 'object') return -1;
-  const first = Object.values(data as Record<string, unknown>)[0];
-  if (first === undefined) return -1;
-  const inner = dataDepth(first);
-  return inner < 0 ? -1 : inner + 1;
-}
-
-/** Rows under a `data` object at any nesting depth, counted not decoded. */
-export function countRows(data: unknown): number {
-  if (Array.isArray(data)) return data.length;
-  if (data === null || typeof data !== 'object') return 0;
-  return Object.values(data as Record<string, unknown>).reduce<number>(
-    (total, group) => total + countRows(group),
-    0,
-  );
-}
-
-/**
- * The column layout of a list payload.
- *
- * One reader, used both when a list is placed into a family and when it is
- * decoded, so the two cannot disagree about what a payload's columns are or
- * report the same drift as two different errors.
- */
-export function readListLayout(where: string, payload: ListPayload): ColumnLayout {
-  const dataFields = payload.DataFields;
-  if (!Array.isArray(dataFields) || !dataFields.every((f) => typeof f === 'string')) {
-    throw new DecodeError(`${where}: DataFields is not an array of strings.`);
-  }
-  const fields = Array.isArray(payload.list?.Fields) ? (payload.list.Fields as DisplayField[]) : [];
-
-  return readColumnLayout(where, dataFields, fields);
-}
-
-/** Every `(groupKey, row)` pair under a depth-1 `data` object, in payload order. */
-function* depthOneRows(where: string, data: unknown): Generator<[string, unknown[]]> {
-  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-    throw new DecodeError(`${where}: \`data\` is not a group object.`);
-  }
-  for (const [groupKey, group] of Object.entries(data as Record<string, unknown>)) {
-    if (!Array.isArray(group)) {
-      throw new DecodeError(`${where}: group "${groupKey}" does not hold an array of rows.`);
-    }
-    for (const row of group) {
-      if (!Array.isArray(row)) {
-        throw new DecodeError(`${where}: group "${groupKey}" holds a non-row entry.`);
-      }
-      yield [groupKey, row];
-    }
-  }
-}
-
-/** `Number of records: 423`, or null where the source published no footer. */
-export function publishedRowCount(footer: unknown): number | null {
-  if (typeof footer !== 'string') return null;
-  const match = /Number of records:\s*(\d+)/i.exec(footer);
-  return match ? Number(match[1]) : null;
-}
-
 /**
  * Seconds for a published time, or null when it is not a time.
  *
@@ -170,78 +87,17 @@ export function parseTimeSeconds(raw: string): number | null {
 }
 
 /** The four lap-split columns, in order. The 2026 layout publishes only two. */
-const LAP_FIELDS = ['lap1', 'lap2', 'lap3', 'lap4'] as const satisfies readonly IndividualField[];
-
-/** An empty cell carries no value. A published sentinel like `-` is a value. */
-function cellOrNull(value: string | undefined): string | null {
-  return value === undefined || value === '' ? null : value;
-}
+const LAP_FIELDS = ['lap1', 'lap2', 'lap3', 'lap4'] as const;
 
 /**
- * An integer cell, or null when the source left it empty.
- *
- * Refuses anything else rather than returning null. `points` has no verbatim
- * sibling column the way `time_raw` sits beside `time_seconds`, so a published
- * value that failed to parse would simply vanish — which is the one thing a
- * fidelity layer may never do.
+ * The flat list's columns, plus the one rule the shared resolver cannot state:
+ * a name arrives whole, or split in two.
  */
-function parseIntOrRefuse(where: string, field: string, value: string | null): number | null {
-  if (value === null) return null;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed)) {
-    throw new DecodeError(
-      `${where}: ${field} is "${value}", which is not an integer. ` +
-        'There is no verbatim column to fall back on, so this cannot be stored as null.',
-    );
-  }
-  return parsed;
-}
+function resolveIndividualFields(where: string, layout: ColumnLayout): FieldColumns {
+  const columns = resolveFamilyFields(where, layout, INDIVIDUAL_FLAT);
 
-/**
- * Check that every transported expression is accounted for.
- *
- * Strict unknown-expression fatality, pre-v1. Recognized means mapped to a
- * canonical field *or* on the ignore list; an expression nobody has classified
- * halts the event rather than being decoded around.
- */
-export function checkExpressionsRecognized(where: string, layout: ColumnLayout): void {
-  const known = new Set<string>(INDIVIDUAL_FLAT_IGNORED);
-  for (const aliases of Object.values(INDIVIDUAL_FLAT_ALIASES)) {
-    for (const alias of aliases) known.add(alias);
-  }
-
-  const unknown = layout.dataFields.filter((expression) => !known.has(expression));
-  if (unknown.length > 0) {
-    throw new DecodeError(
-      `${where}: ${unknown.length} unrecognized expression(s): ${unknown.join(', ')}. ` +
-        'Every expression must be mapped to a canonical field or explicitly ignored ' +
-        '(src/lib/ingest/families.ts) before this event can be decoded.',
-    );
-  }
-}
-
-/** Resolve every canonical field to a column, or to null where absent. */
-function resolveFields(
-  where: string,
-  layout: ColumnLayout,
-): Record<IndividualField, number | null> {
-  const columns = {} as Record<IndividualField, number | null>;
-
-  for (const [field, aliases] of Object.entries(INDIVIDUAL_FLAT_ALIASES)) {
-    const resolved = layout.resolve(field, aliases);
-    columns[field as IndividualField] = resolved?.column ?? null;
-  }
-
-  const missing = INDIVIDUAL_FLAT_REQUIRED.filter((field) => columns[field] === null);
-  if (missing.length > 0) {
-    throw new DecodeError(
-      `${where}: required field(s) ${missing.join(', ')} resolve to no column. ` +
-        `Columns present: ${layout.dataFields.join(', ')}`,
-    );
-  }
-
-  // A name arrives whole, or split in two. The 2025 prologue is the only place
-  // the split appears, and it is an alias for the same canonical field.
+  // The 2025 prologue is the only place the split appears, and it is an alias
+  // for the same canonical field.
   const whole = columns.displayName !== null;
   const split = columns.firstName !== null && columns.lastName !== null;
   if (!whole && !split) {
@@ -264,30 +120,19 @@ export function decodeIndividualFlat(
   where: string,
   variant: LayoutVariant,
   payload: ListPayload,
-): DecodedList {
-  const dataFields = payload.DataFields;
-  if (!Array.isArray(dataFields) || !dataFields.every((f) => typeof f === 'string')) {
-    throw new DecodeError(`${where}: DataFields is not an array of strings.`);
-  }
-  const fields = Array.isArray(payload.list?.Fields) ? (payload.list.Fields as DisplayField[]) : [];
+): DecodedList<IndividualRow> {
+  const layout = readListLayout(where, payload);
+  checkExpressionsRecognized(where, layout, INDIVIDUAL_FLAT);
 
-  const layout = readColumnLayout(where, dataFields, fields);
-  checkExpressionsRecognized(where, layout);
-  const columns = resolveFields(where, layout);
-
-  const at = (row: readonly string[], field: IndividualField): string | null => {
-    const column = columns[field];
-    return column === null ? null : cellOrNull(layout.cell(row, column));
-  };
+  const columns = resolveIndividualFields(where, layout);
+  const at = cellReader(layout, columns);
 
   const rows: IndividualRow[] = [];
-  let rowNumber = 0;
 
-  for (const [groupKey, rawRow] of depthOneRows(where, payload.data)) {
-    rowNumber += 1;
-    layout.checkRowWidth(rawRow, rowNumber);
-    const row = rawRow.map((cell) => (cell === null ? '' : String(cell)));
+  for (const { groups, row, number } of groupedRows(where, payload.data, INDIVIDUAL_FLAT.depth)) {
+    layout.checkRowWidth(row, number);
 
+    const groupKey = groups[0]!;
     const category = normalizeCategory(groupKey);
     const plate = at(row, 'plate');
     const place = at(row, 'place');
@@ -296,7 +141,7 @@ export function decodeIndividualFlat(
 
     if (plate === null || place === null || timeRaw === null || scoringTeam === null) {
       throw new DecodeError(
-        `${where}: row ${rowNumber} in "${groupKey}" leaves a required field empty ` +
+        `${where}: row ${number} in "${groupKey}" leaves a required field empty ` +
           '(plate, place, time or scoring team). A blank required cell is not a null result.',
       );
     }
@@ -306,7 +151,7 @@ export function decodeIndividualFlat(
         ? (at(row, 'displayName') ?? '')
         : `${at(row, 'firstName') ?? ''} ${at(row, 'lastName') ?? ''}`.trim();
     if (displayName === '') {
-      throw new DecodeError(`${where}: row ${rowNumber} in "${groupKey}" has no name.`);
+      throw new DecodeError(`${where}: row ${number} in "${groupKey}" has no name.`);
     }
 
     const laps = LAP_FIELDS.map((field) => at(row, field));
@@ -316,7 +161,7 @@ export function decodeIndividualFlat(
     rows.push({
       plate,
       // Provenance only. `ID` restarts at 1 every event and 468 values map to
-      // more than one person in a single season — never join on it.
+      // more than one person in one season — never join on it.
       sourceRowId: at(row, 'sourceRowId'),
       displayName,
       // The source's CLUB is our scoring_team, never our club.
@@ -350,21 +195,12 @@ export function decodeIndividualFlat(
     });
   }
 
-  const publishedCount = publishedRowCount(payload.list?.ListFooterText);
-  if (publishedCount !== null && publishedCount !== rows.length) {
-    throw new DecodeError(
-      `${where}: decoded ${rows.length} rows but the source footer says ${publishedCount}. ` +
-        'A count that disagrees with the published one means rows were lost or duplicated.',
-    );
-  }
-
-  const plates = new Set(rows.map((row) => row.plate));
-  if (plates.size !== rows.length) {
-    throw new DecodeError(
-      `${where}: ${rows.length} rows carry only ${plates.size} distinct plates. ` +
-        'The plate is the row key for an event; a collision would silently drop a result.',
-    );
-  }
+  const publishedCount = checkRowCount(where, payload.list?.ListFooterText, rows.length);
+  checkUniqueKey(
+    where,
+    'plates',
+    rows.map((row) => row.plate),
+  );
 
   return { variant, expressions: layout.dataFields, publishedCount, rows };
 }

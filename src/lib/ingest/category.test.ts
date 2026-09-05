@@ -4,7 +4,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { CategoryError, normalizeCategory, stripGroupOrdinal } from './category.ts';
+import { CategoryError, normalizeCategory } from './category.ts';
+import { stripGroupOrdinal } from './rows.ts';
 
 describe('stripGroupOrdinal', () => {
   it('drops the presentation ordinal the source prefixes', () => {

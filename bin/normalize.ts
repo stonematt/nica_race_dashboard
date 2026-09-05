@@ -18,8 +18,9 @@
  *
  * Decoding reads `raw_fetch` and nothing else — no network, ever — takes the
  * latest row per `(event_id, list_id)`, and writes one event per transaction.
- * The flat individual list is decoded here (issue #23); the rest of the catalog
- * is recognized, reported as skipped, and decoded by issue #25.
+ * All six published list families decode (issues #23 and #25); a list that is
+ * recognized but not written — a duplicate layout, or a season snapshot rather
+ * than the season record — is reported with the reason.
  */
 
 import { createDb } from '../src/lib/db/index.ts';
@@ -46,9 +47,13 @@ if (process.argv.includes('--snapshot')) {
   process.exit(0);
 }
 
+const rows = Object.entries(result.rows)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([table, n]) => `${table} ${n}`)
+  .join(', ');
+
 console.log(
-  `decoded ${result.individualRows} individual results across ${result.events} events in ${url}; ` +
-    `${result.lists - result.skipped} of ${result.lists} lists decoded, ` +
-    `${result.skipped} recognized and left for issue #25`,
+  `decoded ${result.decodedLists} of ${result.lists} lists across ${result.events} events ` +
+    `in ${url} (${result.skipped} recognized and not written): ${rows}`,
 );
 process.exit(0);

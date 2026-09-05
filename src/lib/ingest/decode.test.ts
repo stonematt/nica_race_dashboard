@@ -11,14 +11,8 @@
 import { describe, expect, it } from 'vitest';
 import { CategoryError } from './category.ts';
 import { ColumnError } from './columns.ts';
-import {
-  DecodeError,
-  dataDepth,
-  decodeIndividualFlat,
-  parseTimeSeconds,
-  publishedRowCount,
-  type ListPayload,
-} from './decode.ts';
+import { decodeIndividualFlat, parseTimeSeconds } from './decode.ts';
+import { DecodeError, dataDepth, publishedRowCount, type ListPayload } from './rows.ts';
 import { INDIVIDUAL_FLAT } from './families.ts';
 
 const PLACE_2025 =
@@ -220,7 +214,9 @@ describe('decodeIndividualFlat', () => {
     payload.data = { '#1_HS1 Boys - North': [[...winner, 'x']] };
 
     expect(() => decode(payload)).toThrow(DecodeError);
-    expect(() => decode(payload)).toThrow(/unrecognized expression\(s\): SomethingNew/);
+    expect(() => decode(payload)).toThrow(
+      /expression\(s\) unrecognized for individual_flat: SomethingNew/,
+    );
   });
 
   it('is fatal when a required field resolves to no column', () => {

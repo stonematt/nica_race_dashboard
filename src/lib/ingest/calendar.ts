@@ -26,6 +26,7 @@
 import { eq, and } from 'drizzle-orm';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from '../db/schema.ts';
+import type { Conference } from './category.ts';
 import { IngestError } from './errors.ts';
 
 type Db = PgliteDatabase<typeof schema>;
@@ -45,7 +46,7 @@ export interface EventIdentity {
   roundName: string;
   sourceEventId: string;
   /** North/South for a conference event, null where the event carries both. */
-  conference: string | null;
+  conference: Conference | null;
   /** The config's `eventname`, verbatim. */
   name: string;
 }
@@ -82,7 +83,7 @@ export function readEventIdentity(
     roundOrdinal: Number(race[1]),
     roundName: `Race ${Number(race[1])}`,
     sourceEventId,
-    conference: suffix?.[1] ?? null,
+    conference: (suffix?.[1] ?? null) as Conference | null,
     name: eventName,
   };
 }

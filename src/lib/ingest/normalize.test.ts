@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import * as schema from '../db/schema.ts';
 import { createTestDb, type TestDatabase } from '../db/testing.ts';
 import { CONFIG_LIST_NAME, archive } from './raw.ts';
-import { countRows } from './decode.ts';
+import { countRows } from './rows.ts';
 import { normalize, NormalizeError } from './normalize.ts';
 import { buildSnapshot } from './snapshot.ts';
 
@@ -62,7 +62,16 @@ const ttRow = (plate: string) => [
   '40:00.00',
 ];
 
-const BY_TEAM_FIELDS = ['BIB', 'SexMF', 'Grade', 'iif([TS.SCORED]=1;"B;")', 'TimeOrStatus'];
+const BY_TEAM_FIELDS = [
+  'BIB',
+  'choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])',
+  'ucase([DisplayName])',
+  'SexMF',
+  'Grade',
+  'iif([TS.SCORED]=1;"B;")',
+  'TimeOrStatus',
+];
+const byTeamRow = (plate: string) => [plate, '1', `«RIDER-${plate}»`, 'M', '9.0', 'B;', '39:37.12'];
 
 function config(eventId: string, lists: { ID: string; Name: string; Mode?: string }[]) {
   return {
@@ -136,7 +145,7 @@ describe('normalize', () => {
       lists: 1,
       decodedLists: 1,
       skipped: 0,
-      individualRows: 2,
+      rows: { individual_result: 2 },
     });
     expect(await db.select().from(schema.event)).toHaveLength(1);
     expect(await db.select().from(schema.individualResult)).toHaveLength(2);
@@ -186,7 +195,7 @@ describe('normalize', () => {
     expect(await db.select().from(schema.rawFetch)).toHaveLength(3);
   });
 
-  it('recognizes a list it does not decode, and counts it as skipped', async () => {
+  it('decodes the By-Team sidecar into its own table, not into the spine', async () => {
     await seed([
       configRecord(
         '359478',
@@ -204,14 +213,18 @@ describe('normalize', () => {
         '359478',
         'BBB222',
         listPayload(BY_TEAM_FIELDS, {
-          hs: { d1: { team: [['101', 'M', '9', 'B;', '39:37.12']] } },
+          hs: { d1: { team: [byTeamRow('101')] } },
         }),
       ),
     ]);
 
     const result = await normalize(db);
 
-    expect(result).toMatchObject({ lists: 2, decodedLists: 1, skipped: 1, individualRows: 1 });
+    expect(result).toMatchObject({ lists: 2, decodedLists: 2, skipped: 0 });
+    expect(result.rows).toEqual({ individual_result: 1, individual_result_by_team: 1 });
+    // Merging was rejected on #7: the sidecar is HS-only and the join has
+    // orphans, so it keeps its own table and its own fidelity test.
+    expect(await db.select().from(schema.individualResultByTeam)).toHaveLength(1);
   });
 
   it('takes the published list when the time trial is hidden beside it', async () => {
@@ -239,7 +252,7 @@ describe('normalize', () => {
 
     const result = await normalize(db);
 
-    expect(result.individualRows).toBe(1);
+    expect(result.rows.individual_result ?? 0).toBe(1);
     // The hidden list is still recognized and reported, just not decoded.
     expect(result).toMatchObject({ lists: 2, decodedLists: 1, skipped: 1 });
     const [stored] = await db.select().from(schema.individualResult);
@@ -256,7 +269,7 @@ describe('normalize', () => {
       ),
     ]);
 
-    expect((await normalize(db)).individualRows).toBe(1);
+    expect((await normalize(db)).rows.individual_result ?? 0).toBe(1);
   });
 
   it('classifies the expressions of a list it drops, not only the one it decodes', async () => {
@@ -285,12 +298,14 @@ describe('normalize', () => {
       ),
     ]);
 
-    await expect(normalize(db)).rejects.toThrow(/unrecognized expression\(s\): SomethingNew/);
+    await expect(normalize(db)).rejects.toThrow(
+      /expression\(s\) unrecognized for \w+: SomethingNew/,
+    );
   });
 
-  it('does not classify the expressions of a family it has no decoder for', async () => {
-    // #25's families are recognized by signature only. Halting on their
-    // unclassified columns would make this ticket unlandable.
+  it('classifies every family, not only the spine', async () => {
+    // Strict fatality is family-wide: an unclassified column in the By-Team
+    // sidecar halts the event just as one in the spine would.
     await seed([
       configRecord(
         '359478',
@@ -307,13 +322,15 @@ describe('normalize', () => {
       listRecord(
         '359478',
         'BBB222',
-        listPayload([...BY_TEAM_FIELDS, 'DisplayPoints'], {
-          hs: { d1: { team: [['101', 'M', '9', 'B;', '39:37.12', '500']] } },
+        listPayload([...BY_TEAM_FIELDS, 'SomethingNew'], {
+          hs: { d1: { team: [[...byTeamRow('101'), 'x']] } },
         }),
       ),
     ]);
 
-    expect((await normalize(db)).skipped).toBe(1);
+    await expect(normalize(db)).rejects.toThrow(
+      /expression\(s\) unrecognized for individual_by_team/,
+    );
   });
 
   it('is fatal when two published lists claim the same family', async () => {
@@ -360,7 +377,7 @@ describe('normalize', () => {
         '359478',
         'BBB222',
         listPayload(BY_TEAM_FIELDS, {
-          hs: { d1: { team: [['101', 'M', '9', 'B;', '39:37.12']] } },
+          hs: { d1: { team: [byTeamRow('101')] } },
         }),
       ),
     ]);
@@ -382,10 +399,74 @@ describe('normalize', () => {
       ),
     ]);
 
-    await expect(normalize(db)).rejects.toThrow(/unrecognized expression/);
+    await expect(normalize(db)).rejects.toThrow(/expression\(s\) unrecognized/);
     expect(await db.select().from(schema.event)).toHaveLength(0);
     expect(await db.select().from(schema.individualResult)).toHaveLength(0);
     expect(await db.select().from(schema.season)).toHaveLength(0);
+  });
+
+  it('writes nothing for an event when a list that is not the spine fails', async () => {
+    // Whole-event halt is across families: a By-Team failure must suppress the
+    // spine's rows too, or an event lands half-ingested with nothing saying so.
+    await seed([
+      configRecord(
+        '359478',
+        config('359478', [
+          { ID: 'AAA111', Name: 'flat' },
+          { ID: 'BBB222', Name: 'by team' },
+        ]),
+      ),
+      listRecord(
+        '359478',
+        'AAA111',
+        listPayload(FLAT_FIELDS, { '#1_HS1 Boys - North': [row('101', '1')] }),
+      ),
+      listRecord(
+        '359478',
+        'BBB222',
+        listPayload([...BY_TEAM_FIELDS, 'SomethingNew'], {
+          hs: { d1: { team: [[...byTeamRow('101'), 'x']] } },
+        }),
+      ),
+    ]);
+
+    await expect(normalize(db)).rejects.toThrow(/individual_by_team/);
+
+    expect(await db.select().from(schema.individualResult)).toHaveLength(0);
+    expect(await db.select().from(schema.individualResultByTeam)).toHaveLength(0);
+    expect(await db.select().from(schema.event)).toHaveLength(0);
+  });
+
+  it('is fatal when two lists of a non-spine family land in one event', async () => {
+    // The sole-list rule is not the spine's alone: two By-Team lists would
+    // upsert over each other on the same primary key and lose a result.
+    await seed([
+      configRecord(
+        '359478',
+        config('359478', [
+          { ID: 'AAA111', Name: 'flat' },
+          { ID: 'BBB222', Name: 'by team' },
+          { ID: 'CCC333', Name: 'by team again' },
+        ]),
+      ),
+      listRecord(
+        '359478',
+        'AAA111',
+        listPayload(FLAT_FIELDS, { '#1_HS1 Boys - North': [row('101', '1')] }),
+      ),
+      listRecord(
+        '359478',
+        'BBB222',
+        listPayload(BY_TEAM_FIELDS, { hs: { d1: { team: [byTeamRow('101')] } } }),
+      ),
+      listRecord(
+        '359478',
+        'CCC333',
+        listPayload(BY_TEAM_FIELDS, { hs: { d1: { team: [byTeamRow('102')] } } }),
+      ),
+    ]);
+
+    await expect(normalize(db)).rejects.toThrow(/Exactly one must be/);
   });
 
   it('leaves an already-decoded event alone when a later one fails', async () => {
@@ -406,7 +487,7 @@ describe('normalize', () => {
       ),
     ]);
 
-    await expect(normalize(db)).rejects.toThrow(/unrecognized expression/);
+    await expect(normalize(db)).rejects.toThrow(/expression\(s\) unrecognized/);
 
     // The good event is complete; the bad one is entirely absent.
     expect(await db.select().from(schema.event)).toHaveLength(1);
@@ -454,7 +535,7 @@ describe('the snapshot a run produces', () => {
         '359478',
         'BBB222',
         listPayload(BY_TEAM_FIELDS, {
-          hs: { d1: { team: [['101', 'M', '9', 'B;', '39:37.12']] } },
+          hs: { d1: { team: [byTeamRow('101')] } },
         }),
       ),
     ]);
@@ -463,7 +544,7 @@ describe('the snapshot a run produces', () => {
 
     expect(snapshot.version).toBe(1);
     const flat = snapshot.families.find((family) => family.name === 'individual_flat')!;
-    expect(flat.hasDecoder).toBe(true);
+    expect(flat.target).toBe('individual_result');
     expect(flat.lists).toHaveLength(1);
     expect(flat.lists[0]).toMatchObject({
       eventId: '359478',
@@ -474,8 +555,8 @@ describe('the snapshot a run produces', () => {
     expect(flat.expressions).toEqual([...FLAT_FIELDS].sort());
 
     const byTeam = snapshot.families.find((family) => family.name === 'individual_by_team')!;
-    expect(byTeam.hasDecoder).toBe(false);
-    expect(byTeam.lists[0]!.decoded).toBe(false);
+    expect(byTeam.target).toBe('individual_result_by_team');
+    expect(byTeam.lists[0]!.decoded).toBe(true);
   });
 
   it('carries no rider data — only expressions, ids and counts', async () => {
