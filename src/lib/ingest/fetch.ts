@@ -17,6 +17,15 @@
  *     normalize, which runs offline against the archived row and is re-runnable
  *     after a code fix without touching the vendor again.
  *
+ * **What "unconditionally" does not cover: a non-200.** There is no row for a
+ * request the source refused. `raw_fetch.payload` is `NOT NULL` and an error
+ * page is not a payload, so archiving one would mean inventing a document to
+ * store — which is worse than storing nothing, because normalize reads the
+ * latest row per list and would decode the invention. A refusal is recorded as
+ * a raised `SourceUnavailableError` and a run that stopped; everything that
+ * arrived before it is on disk. The unconditional promise is about *content* —
+ * a payload that looks wrong is still archived — not about failed requests.
+ *
  * **Why the empty catalog and nothing else.** A 2026 config read with the 2025
  * `lists` key yields `[]` rather than a 404: it looks like an event that
  * published nothing, not like a failure. That one has to die here, because an
@@ -104,9 +113,20 @@ export interface FetchEventResult {
   rows: number;
 }
 
-/** The path portion of a config URL, without the event id. */
-function configPathFor(shape: SourceShape): string {
-  return new URL(configUrl('EVENT', shape)).pathname.replace('/EVENT/', '');
+/**
+ * The path a config URL asks for, with the event id taken back out:
+ * `results/config`, `RRPublish/data/config`.
+ */
+function configPathOf(url: string, eventId: string): string {
+  return new URL(url).pathname.replace(`/${eventId}/`, '');
+}
+
+/**
+ * Where this shape's config lives, read off the URL `catalog.ts` builds rather
+ * than restated here. One place knows the paths, and it is not this one.
+ */
+function configPathFor(eventId: string, shape: SourceShape): string {
+  return configPathOf(configUrl(eventId, shape), eventId);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,21 +147,21 @@ export function shapeOfArchivedConfig(row: { eventId: string; url: string; paylo
   payloadShape: SourceShape;
   catalogKey: string;
 } {
-  const pathname = new URL(row.url).pathname;
+  const configPath = configPathOf(row.url, row.eventId);
   const requestedShape = SOURCE_SHAPES.find(
-    (shape) => pathname === new URL(configUrl(row.eventId, shape)).pathname,
+    (shape) => configPathFor(row.eventId, shape) === configPath,
   );
   const payloadShape: SourceShape = isRecord(row.payload) && 'Tab' in row.payload ? '2026' : '2025';
 
   return {
-    configPath: pathname.replace(`/${row.eventId}/`, ''),
+    configPath,
     requestedShape,
     payloadShape,
     catalogKey: CATALOG_KEY[payloadShape],
   };
 }
 
-/** Append one row and hand it back, so a caller can count what it wrote. */
+/** Append one payload. `raw.ts` is the only write door, and it is not forked. */
 async function append(db: Db, record: RawFetchRecord): Promise<void> {
   await archive(db, [record]);
 }
@@ -163,7 +183,7 @@ export async function fetchEvent(
 ): Promise<FetchEventResult> {
   const { season, eventId, shape } = request;
   const url = configUrl(eventId, shape);
-  const configPath = configPathFor(shape);
+  const configPath = configPathFor(eventId, shape);
 
   const config = await reader.get(url);
 

@@ -14,8 +14,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as schema from '../db/schema.ts';
 import { createTestDb, type TestDatabase } from '../db/testing.ts';
-import { SourceCatalogError } from './catalog.ts';
+import { readCatalog, SourceCatalogError } from './catalog.ts';
 import {
+  CATALOG_KEY,
   fetchEvent,
   readFetchConfig,
   refuseCorpusRefetch,
@@ -223,6 +224,23 @@ describe('fetchEvent', () => {
     // source one config request and one list, not the whole event again.
     const rows = await rowsOf(db);
     expect(rows.map((row) => row.listId)).toEqual([null, '2A48B4']);
+  });
+});
+
+describe('CATALOG_KEY', () => {
+  it('names, for each shape, the key readCatalog actually read the lists out of', () => {
+    for (const payload of [config2025, config2026]) {
+      const catalog = readCatalog('357242', payload);
+      const found = CATALOG_KEY[catalog.shape]
+        .split('.')
+        .reduce<unknown>((value, key) => (value as Record<string, unknown>)[key], payload);
+
+      // The key is recorded as provenance here while `catalog.ts` decides which
+      // key to read. If those two ever stop agreeing, it fails here rather than
+      // quietly mislabelling the discriminator on every archived row.
+      expect(Array.isArray(found), CATALOG_KEY[catalog.shape]).toBe(true);
+      expect(found as unknown[]).toHaveLength(catalog.lists.length);
+    }
   });
 });
 
