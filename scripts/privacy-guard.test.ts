@@ -8,8 +8,10 @@
  * invented people in it.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { scan } from './privacy-guard.ts';
+import { scan, trackedFiles } from './privacy-guard.ts';
+import { repoRoot } from '../src/lib/fixtures.ts';
 
 /** The shape of a RaceResult list payload, with rows. */
 function payload(rows: unknown[][]) {
@@ -80,34 +82,27 @@ describe('the payload-rows rule', () => {
   });
 });
 
-describe('the name-shape rule', () => {
-  it('refuses a JSON value shaped like a person’s full name', () => {
-    const content = JSON.stringify({ roster: [{ rider: 'Jordan Rivers', grade: 9 }] });
-    expect(scan([{ path: 'docs/roster.json', content }]).map((f) => f.rule)).toEqual([
-      'name-shape',
-    ]);
+describe('the name rules', () => {
+  it('refuses a name in a positional row', () => {
+    // An array of arrays is how RaceResult publishes people. That structure,
+    // not the two capitalised words on its own, is what "payload-shaped" means.
+    const content = JSON.stringify({ rows: [['214', 'Jordan Rivers', '00:41:12.3']] });
+    expect(scan([{ path: 'docs/rows.json', content }]).map((f) => f.rule)).toEqual(['row-name']);
   });
 
-  it('refuses the shouted form RaceResult publishes', () => {
+  it('refuses the shouted form the source publishes', () => {
     // `ucase([DisplayName])` is a real column in the 2026 opener's list.
     const content = JSON.stringify({ rows: [['214', 'JORDAN RIVERS', '00:41:12.3']] });
     expect(scan([{ path: 'docs/rows.json', content }])).toHaveLength(1);
   });
 
-  it('refuses it in a CSV too', () => {
-    const content = 'bib,name,time\n214,Jordan Rivers,00:41:12.3\n';
-    expect(scan([{ path: 'docs/results.csv', content }]).map((f) => f.rule)).toEqual([
-      'name-shape',
-    ]);
-  });
-
   it('refuses a name carrying diacritics', () => {
     // An ASCII-only class quietly exempts a subset of the riders, which is the
     // worst possible thing for a guard whose whole job is covering all of them.
-    const content = JSON.stringify({ rows: [['214', 'José García', '00:41:12.3']] });
-    expect(scan([{ path: 'docs/rows.json', content }])).toHaveLength(1);
-    const shouted = JSON.stringify({ rows: [['214', 'JOSÉ GARCÍA', '00:41:12.3']] });
-    expect(scan([{ path: 'docs/shouted.json', content: shouted }])).toHaveLength(1);
+    for (const name of ['José García', 'JOSÉ GARCÍA']) {
+      const content = JSON.stringify({ rows: [['214', name, '00:41:12.3']] });
+      expect(scan([{ path: 'docs/rows.json', content }])).toHaveLength(1);
+    }
   });
 
   it('refuses the surname-first order too', () => {
@@ -122,14 +117,56 @@ describe('the name-shape rule', () => {
     }
   });
 
+  it('refuses a name under a field that names a person', () => {
+    const content = JSON.stringify({ roster: [{ rider: 'Jordan Rivers', grade: 9 }] });
+    expect(scan([{ path: 'docs/roster.json', content }]).map((f) => f.rule)).toEqual([
+      'identity-key',
+    ]);
+  });
+
+  it('refuses a key-to-display-name map', () => {
+    // The names file deliberately lives outside this tree. This is the rule for
+    // the day it stops doing so.
+    const content = JSON.stringify({
+      'rider-a': 'Jordan Rivers',
+      'rider-b': 'Anne-Marie Dubois',
+      'rider-c': 'José García',
+    });
+    expect(scan([{ path: 'config/rider-names.json', content }]).map((f) => f.rule)).toEqual([
+      'name-map',
+    ]);
+  });
+
+  it('refuses a name in a CSV data line', () => {
+    const content = 'bib,name,time\n214,Jordan Rivers,00:41:12.3\n';
+    expect(scan([{ path: 'docs/results.csv', content }]).map((f) => f.rule)).toEqual(['row-name']);
+  });
+
   it('passes a pseudonym, which is how redacted examples are written here', () => {
     const content = JSON.stringify({ rows: [['214', '«RIDER-A»', '00:41:12.3']] });
     expect(scan([{ path: 'docs/worked-example.json', content }])).toEqual([]);
   });
 
+  it('passes a flat list of school and club names', () => {
+    // config/published-scoring-teams.json. Two capitalised words, no person —
+    // and a guard that cries wolf on the repo's own config gets disabled.
+    const content = JSON.stringify({
+      '2025': ['Ashland High School', 'Corvallis Composite', 'Lake Oswego Composite'],
+    });
+    expect(scan([{ path: 'config/published-scoring-teams.json', content }])).toEqual([]);
+  });
+
+  it('passes a squad or club that has a name', () => {
+    // A bare `name` key belongs to things as often as to people, so it is not
+    // an identity key. config/club-seed.json relies on this.
+    const content = JSON.stringify({
+      club: 'Salem Composite Descenders',
+      squads: [{ name: 'Fast Group', members: ['rider-a'] }],
+    });
+    expect(scan([{ path: 'config/club-seed.json', content }])).toEqual([]);
+  });
+
   it('leaves prose and source alone', () => {
-    // The rule would light up on half the repo's comments otherwise, and a
-    // guard everyone learns to override is not a guard.
     const content = 'The coach Jordan Rivers asked for this.\n';
     expect(scan([{ path: 'docs/fixtures.md', content }])).toEqual([]);
     expect(scan([{ path: 'src/lib/seed.ts', content }])).toEqual([]);
@@ -148,3 +185,28 @@ describe('the name-shape rule', () => {
     expect(scan([{ path: 'public/logo.png' }])).toEqual([]);
   });
 });
+
+describe('this repository', () => {
+  it('is clean, and the guard does not cry wolf on its own committed files', () => {
+    // The regression this exists for: an earlier version of the name rule
+    // flagged config/published-scoring-teams.json and config/club-seed.json,
+    // which carry school and squad names and no identity at all. A guard that
+    // fails on the repo's own config is one that gets switched off. Running the
+    // real scan here means CI catches that before a red build does.
+    const findings = scan(
+      trackedFiles(repoRoot()).map((path) => ({
+        path,
+        content: readFile(`${repoRoot()}/${path}`),
+      })),
+    );
+    expect(findings).toEqual([]);
+  });
+});
+
+function readFile(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+}

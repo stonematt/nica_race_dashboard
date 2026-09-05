@@ -19,10 +19,12 @@
  *   2. A tracked RaceResult-shaped payload must carry NO rows. This is the rule
  *      that guards the committed shape corpus (#31): a stripper regression that
  *      starts emitting real rows fails the build rather than publishing them.
- *   3. No tracked JSON or CSV carries a value shaped like a person's full name,
- *      in either order and with diacritics. This is the name-shape assertion #28
- *      asks for. Pseudonyms («RIDER-A»), which is how redacted examples are
- *      written in this repo, pass.
+ *   3. No tracked JSON or CSV holds a name-shaped value WHERE A PERSON GOES: a
+ *      positional row, a field that names a person, or an object that maps keys
+ *      to display names. This is the name-shape assertion #28 asks for, and the
+ *      structure matters as much as the shape — a flat list of school names is
+ *      not payload-shaped data, and a guard that says it is gets disabled.
+ *      Pseudonyms («RIDER-A»), the redaction form used here, pass.
  *
  * The core is a pure function over (path, content) pairs so it can be tested
  * against synthetic payloads without a git repo and without reading the real
@@ -63,11 +65,20 @@ const NAME_SHAPE = new RegExp(`(?<!\\p{L})${NAME_WORD}(?:, | )${NAME_WORD}(?!\\p
 /** A redacted stand-in. The established form in this repo is «RIDER-A». */
 const PSEUDONYM = /^«[^»]+»$/;
 
+/** The three ways a name-shaped value earns a finding. See nameFindings(). */
+export type NameRule = 'row-name' | 'identity-key' | 'name-map';
+
 export interface Finding {
   path: string;
-  rule: 'tracked-corpus-path' | 'payload-rows' | 'name-shape';
+  rule: 'tracked-corpus-path' | 'payload-rows' | NameRule;
   detail: string;
 }
+
+const NAME_RULE_DETAIL: Record<NameRule, string> = {
+  'row-name': 'a positional row holds a value shaped like a person’s full name',
+  'identity-key': 'a field that names a person holds a value shaped like a full name',
+  'name-map': 'an object maps keys to values that are mostly shaped like full names',
+};
 
 export interface ScannedFile {
   path: string;
@@ -96,18 +107,97 @@ function rowsOf(data: unknown): unknown[] {
   return [];
 }
 
-/** Every string anywhere in a parsed JSON value. */
-function* strings(value: unknown): Generator<string> {
-  if (typeof value === 'string') yield value;
-  else if (Array.isArray(value)) for (const item of value) yield* strings(item);
-  else if (typeof value === 'object' && value !== null) {
-    for (const item of Object.values(value)) yield* strings(item);
-  }
-}
-
 function looksLikeAName(value: string): boolean {
   if (PSEUDONYM.test(value.trim())) return false;
   return NAME_SHAPE.test(value);
+}
+
+/** `Rider Name`, `display_name` and `RIDERNAME` all normalize to the same key. */
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z]/g, '');
+}
+
+/**
+ * Keys that name a person rather than a thing. Deliberately excludes a bare
+ * `name`: clubs, squads and scoring teams all have one, and a rule that fires
+ * on every `name` in the repo is a rule people learn to route around.
+ */
+const IDENTITY_KEYS = new Set([
+  'firstname',
+  'lastname',
+  'surname',
+  'givenname',
+  'fullname',
+  'displayname',
+  'ridername',
+  'rider',
+  'athlete',
+  'participant',
+]);
+
+/** Enough values to tell a mapping from a coincidence. */
+const NAME_MAP_MINIMUM = 3;
+
+/**
+ * Where a name is allowed to be found, and where it is not.
+ *
+ * The earlier version of this rule looked at every string in every tracked JSON
+ * and flagged anything with two capitalised words in it. That fires on
+ * `config/published-scoring-teams.json` ("Ashland High School") and on every
+ * squad name in `config/club-seed.json` — files that carry no identity at all —
+ * and a guard that cries wolf on the repo's own config is one that gets
+ * disabled. So the rule asks where the name sits, not just whether it is there:
+ *
+ *   - **A positional row.** An array of arrays is how RaceResult publishes
+ *     people, and it is what "payload-shaped data" means. A school name in a
+ *     flat list of strings is not that shape.
+ *   - **An identity key.** `displayName`, `lastName`, `rider` — a field that
+ *     names a person by definition.
+ *   - **A name map.** An object whose string values are mostly name-shaped: the
+ *     key → display-name file that deliberately lives outside this tree, if it
+ *     ever stopped doing so.
+ */
+function* nameFindings(value: unknown): Generator<NameRule> {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (
+        Array.isArray(item) &&
+        item.some((cell) => typeof cell === 'string' && looksLikeAName(cell))
+      ) {
+        yield 'row-name';
+      }
+      yield* nameFindings(item);
+    }
+    return;
+  }
+
+  if (typeof value !== 'object' || value === null) return;
+
+  const entries = Object.entries(value as Record<string, unknown>);
+
+  for (const [key, item] of entries) {
+    if (typeof item === 'string' && IDENTITY_KEYS.has(normalizeKey(key)) && looksLikeAName(item)) {
+      yield 'identity-key';
+    }
+  }
+
+  const stringValues = entries.map(([, item]) => item).filter((item) => typeof item === 'string');
+  if (
+    stringValues.length >= NAME_MAP_MINIMUM &&
+    stringValues.filter(looksLikeAName).length * 2 > stringValues.length
+  ) {
+    yield 'name-map';
+  }
+
+  for (const [, item] of entries) yield* nameFindings(item);
+}
+
+/** A CSV data line — the header names columns, the rest carry people. */
+function csvNameFindings(content: string): boolean {
+  return content
+    .split('\n')
+    .slice(1)
+    .some((line) => line.split(',').some((cell) => looksLikeAName(cell.trim())));
 }
 
 /**
@@ -152,26 +242,17 @@ export function scan(files: ScannedFile[]): Finding[] {
           }
         }
 
-        const named = [...strings(parsed)].find(looksLikeAName);
-        if (named !== undefined) {
-          findings.push({
-            path,
-            rule: 'name-shape',
-            // The matching value is NOT echoed. If it is a real name, this
-            // message is the last place it should be reproduced.
-            detail: 'a value is shaped like a person’s full name',
-          });
+        // The matching value is never echoed. If it is a real name, a failure
+        // message in a public CI log is the last place to reproduce it.
+        for (const rule of new Set(nameFindings(parsed))) {
+          findings.push({ path, rule, detail: NAME_RULE_DETAIL[rule] });
         }
         continue;
       }
     }
 
-    if (content.split('\n').some(looksLikeAName)) {
-      findings.push({
-        path,
-        rule: 'name-shape',
-        detail: 'a line is shaped like a person’s full name',
-      });
+    if (csvNameFindings(content)) {
+      findings.push({ path, rule: 'row-name', detail: NAME_RULE_DETAIL['row-name'] });
     }
   }
 

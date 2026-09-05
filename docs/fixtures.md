@@ -92,7 +92,12 @@ tree does not trip it, and applies three rules:
    committed shape corpus ([#31](https://github.com/stonematt/nica_race_dashboard/issues/31)),
    so a stripper regression that starts emitting real rows fails the build instead of
    publishing them.
-3. No tracked JSON or CSV carries a value shaped like a person's full name. Pseudonyms
+3. No tracked JSON or CSV holds a name-shaped value **where a person goes**: a positional
+   row (the shape RaceResult publishes people in), a field that names a person
+   (`displayName`, `lastName`, `rider` — but not a bare `name`, which clubs and squads
+   have too), or an object mapping keys to display names. Structure matters as much as
+   shape: `config/published-scoring-teams.json` is a flat list of school names, and a
+   guard that fails on the repo's own config is one that gets switched off. Pseudonyms
    (`«RIDER-A»`) pass.
 
 Run it yourself with `pnpm privacy:check`. It never echoes the value it matched — a
