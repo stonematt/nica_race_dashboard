@@ -14,7 +14,7 @@ import { eq } from 'drizzle-orm';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadClubConfig, pseudonymFor, type ClubConfig } from './club-config.ts';
+import { ClubConfigError, loadClubConfig, pseudonymFor, type ClubConfig } from './club-config.ts';
 import { createTestDb, type TestDatabase } from './db/testing.ts';
 import * as schema from './db/schema.ts';
 import { NotAllowlistedError, seedAdmin, seedClubConfig } from './seed.ts';
@@ -302,6 +302,65 @@ describe('seedClubConfig', () => {
 
     const names = (await db.select().from(schema.rider)).map((r) => r.displayName);
     expect(names.every((n) => /^«RIDER-[A-Z]+»$/.test(n))).toBe(true);
+  });
+});
+
+describe('seedClubConfig refuses an unpublished scoring team', () => {
+  it('fails loudly rather than seeding a string the league does not publish', async () => {
+    // Validating in the loader is not enough: the requirement is that *seeding*
+    // refuses, not that every caller remembered to validate first.
+    await expect(
+      seedClubConfig(db, clubConfig({ scoringTeams: ['Sprague Descenders'] })),
+    ).rejects.toThrow(ClubConfigError);
+
+    expect(await db.select().from(schema.club)).toHaveLength(0);
+    expect(await db.select().from(schema.rider)).toHaveLength(0);
+  });
+
+  it('fails loudly on a season with no published set', async () => {
+    await expect(seedClubConfig(db, clubConfig({ season: 2019 }))).rejects.toThrow(ClubConfigError);
+  });
+});
+
+describe('seedClubConfig cleans up what the config dropped', () => {
+  const twoRiders = clubConfig({
+    riders: [rider('rider-a', plate('202')), rider('rider-b', plate('204'))],
+    squads: [{ name: 'Descenders', members: ['rider-a', 'rider-b'] }],
+  });
+
+  it('clears the plate mappings of a rider the config no longer lists', async () => {
+    const { seasonId } = await seedClubConfig(db, twoRiders);
+    await seedClubConfig(
+      db,
+      clubConfig({
+        riders: [rider('rider-a', plate('202'))],
+        squads: [{ name: 'Descenders', members: ['rider-a'] }],
+      }),
+    );
+
+    // The roster row survives — dropping a rider is not this edit's decision —
+    // but the stale mapping must not go on resolving plate 204 to them.
+    expect(await db.select().from(schema.rider)).toHaveLength(2);
+    const mappings = await db.select().from(schema.riderPlate);
+    expect(mappings.map((m) => m.plate)).toEqual(['202']);
+
+    await archiveRace(seasonId, 1, [['204', SALEM]]);
+    expect((await unmapped()).map((r) => r.plate)).toEqual(['204']);
+  });
+
+  it('removes a squad the config no longer names, members and all', async () => {
+    await seedClubConfig(db, twoRiders);
+    await seedClubConfig(
+      db,
+      clubConfig({
+        riders: [rider('rider-a', plate('202')), rider('rider-b', plate('204'))],
+        squads: [{ name: 'Racers', members: ['rider-a'] }],
+      }),
+    );
+
+    const squads = await db.select().from(schema.squad);
+    expect(squads.map((s) => s.name)).toEqual(['Racers']);
+    expect(await db.select().from(schema.squadMember)).toHaveLength(1);
   });
 });
 

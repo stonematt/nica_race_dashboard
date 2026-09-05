@@ -74,6 +74,22 @@ export interface PlateBinding {
   toRound: number | null;
 }
 
+/**
+ * Do two windows for one plate cover a common round? Null bounds are open, so
+ * an unbounded window overlaps everything. A plate is never held by two people
+ * at the same race, which is what makes bounded reissues resolvable at all —
+ * both the config validator and the seeder lean on this one rule.
+ */
+export function plateWindowsOverlap(
+  a: Pick<PlateBinding, 'fromRound' | 'toRound'>,
+  b: Pick<PlateBinding, 'fromRound' | 'toRound'>,
+): boolean {
+  return (
+    (a.fromRound ?? Number.NEGATIVE_INFINITY) <= (b.toRound ?? Number.POSITIVE_INFINITY) &&
+    (b.fromRound ?? Number.NEGATIVE_INFINITY) <= (a.toRound ?? Number.POSITIVE_INFINITY)
+  );
+}
+
 export interface RiderConfig {
   /** Stable, non-identifying handle. Referenced by squads and the names map. */
   key: string;
@@ -310,8 +326,8 @@ function parseRiders(
 
   const riders: RiderConfig[] = [];
   const seenKeys = new Set<string>();
-  /** plate -> the bounded windows claimed for it, to catch overlaps. */
-  const windows = new Map<string, { key: string; from: number; to: number }[]>();
+  /** plate -> the windows claimed for it, so an overlap can be caught. */
+  const windows = new Map<string, (PlateBinding & { key: string })[]>();
 
   for (const [index, entry] of raw.entries()) {
     const where = `riders[${index}]`;
@@ -332,11 +348,9 @@ function parseRiders(
 
     const plates = parsePlates(entry.plates, `${where}.plates`, problems);
     for (const binding of plates) {
-      const from = binding.fromRound ?? Number.NEGATIVE_INFINITY;
-      const to = binding.toRound ?? Number.POSITIVE_INFINITY;
       const claimed = windows.get(binding.plate) ?? [];
       for (const other of claimed) {
-        if (from <= other.to && other.from <= to) {
+        if (plateWindowsOverlap(binding, other)) {
           // A plate is never held by two people at the same race — reissues are
           // always disjoint in time. An overlap here would make the rider a
           // race result resolves to depend on row order.
@@ -346,7 +360,7 @@ function parseRiders(
           );
         }
       }
-      claimed.push({ key, from, to });
+      claimed.push({ key, ...binding });
       windows.set(binding.plate, claimed);
     }
 

@@ -32,14 +32,27 @@
  * first coach who can get in, not a permission level.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import { isAllowed, type AllowlistEnv } from './allowlist.ts';
-import type { ClubConfig } from './club-config.ts';
+import {
+  ClubConfigError,
+  loadPublishedScoringTeams,
+  plateWindowsOverlap,
+  type ClubConfig,
+  type PlateBinding,
+} from './club-config.ts';
 import * as schema from './db/schema.ts';
 
 type Db = PgliteDatabase<typeof schema>;
+/**
+ * The handle drizzle hands a `db.transaction` callback. Named by unwrapping the
+ * method's own signature rather than importing it, so a drizzle upgrade that
+ * reshapes the transaction type cannot leave this quietly wrong.
+ */
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+/** Either handle. The club lookup is shared between a transaction and a plain db. */
+type Executor = Db | Tx;
 
 export interface SeedAdminOptions {
   email: string;
@@ -79,13 +92,9 @@ export async function seedAdmin(db: Db, options: SeedAdminOptions): Promise<Seed
   const displayName = options.displayName?.trim() || (email.split('@')[0] ?? email);
   const clubName = options.clubName.trim();
 
-  // Club first: the coach row references it. Look up before inserting rather
-  // than upserting, so a second run reuses the existing id instead of burning
-  // one from the serial sequence.
-  const existingClub = await db.select().from(schema.club).where(eq(schema.club.name, clubName));
-  const clubId =
-    existingClub[0]?.id ??
-    (await db.insert(schema.club).values({ name: clubName }).returning())[0]!.id;
+  // Club first: the coach row references it. Shared with seedClubConfig, so
+  // seeding an admin and seeding the config land on the same club row.
+  const clubId = await upsertClub(db, clubName);
 
   // `user` is adapter-owned and carries no unique index on email, so identity
   // is resolved by query, not by an ON CONFLICT target. Do not add one — the
@@ -132,17 +141,30 @@ export interface SeedClubResult {
   squadMembers: number;
 }
 
+export interface SeedClubOptions {
+  /**
+   * The scoring-team strings the league published, by season. Defaults to the
+   * checked-in registry.
+   */
+  publishedScoringTeams?: Map<number, Set<string>>;
+}
+
 /**
- * Write a validated club config into the database.
+ * Write a club config into the database.
+ *
+ * **It re-checks the scoring teams itself.** `parseClubConfig` already does,
+ * and this is deliberately redundant: the requirement is that *seeding* refuses
+ * a string the league does not publish, and a guarantee that holds only because
+ * every caller remembered to validate first is not that guarantee.
  *
  * The config file is the source of truth, so the three tables that are pure
  * projections of it — `club_scoring_team`, `rider_plate` and `squad_member` —
- * are replaced within their scope rather than merged into. A mapping the coach
- * deleted has to actually disappear, or the unmapped-rider warning goes on
- * quietly resolving a plate to the wrong person. The identity rows themselves —
- * `club`, `rider`, `squad` — are only ever created or renamed, never deleted:
- * dropping a rider row cascades their squad membership away, and that is a
- * decision a config edit should not make on its own.
+ * are reconciled, not merged into. A mapping the coach deleted has to actually
+ * disappear, or the unmapped-rider warning goes on quietly resolving a plate to
+ * the wrong person. `club` and `rider` rows are only ever created or renamed:
+ * dropping a rider cascades away squad membership and is a decision a config
+ * edit should not make on its own. A squad the config no longer names *is*
+ * removed, since a squad is nothing but its name and its members.
  *
  * **How a rider is recognised on a second run.** The schema gives `rider` no
  * external key — only an id, a display name and free-text notes — so identity
@@ -154,79 +176,46 @@ export interface SeedClubResult {
  * indistinguishable from a new rider and seeds as one; the old roster row is
  * left standing rather than guessed at.
  *
+ * **What "this club's riders" means, and its one gap.** Nothing in the schema
+ * ties a rider to a club, so the riders a dropped mapping can be cleaned up for
+ * are the ones reachable through the club's squads plus the ones this config
+ * seeds. A rider who was in no squad *and* has been deleted from the config
+ * keeps their old plate mappings; there is no row anywhere that says they were
+ * ever ours. A `rider.club_id` would close it.
+ *
  * The season row is created if missing. It carries a year and nothing else —
  * making config wait on an ingest to supply one would couple the two halves in
  * exactly the way keeping them apart is meant to prevent.
  */
-export async function seedClubConfig(db: Db, config: ClubConfig): Promise<SeedClubResult> {
+export async function seedClubConfig(
+  db: Db,
+  config: ClubConfig,
+  options: SeedClubOptions = {},
+): Promise<SeedClubResult> {
+  assertScoringTeamsPublished(config, options.publishedScoringTeams ?? loadPublishedScoringTeams());
+
   return db.transaction(async (tx) => {
     const seasonId = await upsertSeason(tx, config.season);
     const clubId = await upsertClub(tx, config.club);
 
-    await tx
-      .delete(schema.clubScoringTeam)
-      .where(
-        and(
-          eq(schema.clubScoringTeam.clubId, clubId),
-          eq(schema.clubScoringTeam.seasonId, seasonId),
-        ),
-      );
-    if (config.scoringTeams.length > 0) {
-      await tx
-        .insert(schema.clubScoringTeam)
-        .values(config.scoringTeams.map((scoringTeam) => ({ clubId, seasonId, scoringTeam })));
-    }
+    // Read the club's current roster reach before rewriting anything: after the
+    // squads are reconciled, a rider dropped from the config is unreachable.
+    const priorRiderIds = await ridersInClubSquads(tx, clubId);
 
-    const riderIds = new Map<string, number>();
-    let ridersCreated = 0;
-    let plates = 0;
+    await replaceScoringTeams(tx, clubId, seasonId, config);
+    const { riderIds, ridersCreated, plates } = await replaceRiders(tx, seasonId, config);
+    const squadMembers = await replaceSquads(tx, clubId, config, riderIds);
 
-    for (const rider of config.riders) {
-      const existingId = await findRiderByPlates(tx, seasonId, rider.plates);
-      let riderId: number;
-      if (existingId === null) {
-        const [row] = await tx
-          .insert(schema.rider)
-          .values({ displayName: rider.displayName })
-          .returning({ id: schema.rider.id });
-        riderId = row!.id;
-        ridersCreated += 1;
-      } else {
-        riderId = existingId;
-        await tx
-          .update(schema.rider)
-          .set({ displayName: rider.displayName })
-          .where(eq(schema.rider.id, riderId));
-      }
-      riderIds.set(rider.key, riderId);
-
+    const dropped = [...priorRiderIds].filter((id) => ![...riderIds.values()].includes(id));
+    if (dropped.length > 0) {
       await tx
         .delete(schema.riderPlate)
         .where(
-          and(eq(schema.riderPlate.riderId, riderId), eq(schema.riderPlate.seasonId, seasonId)),
+          and(
+            eq(schema.riderPlate.seasonId, seasonId),
+            inArray(schema.riderPlate.riderId, dropped),
+          ),
         );
-      await tx.insert(schema.riderPlate).values(
-        rider.plates.map((binding) => ({
-          riderId,
-          seasonId,
-          plate: binding.plate,
-          fromRoundOrdinal: binding.fromRound,
-          toRoundOrdinal: binding.toRound,
-        })),
-      );
-      plates += rider.plates.length;
-    }
-
-    let squadMembers = 0;
-    for (const squad of config.squads) {
-      const squadId = await upsertSquad(tx, clubId, squad.name);
-      await tx.delete(schema.squadMember).where(eq(schema.squadMember.squadId, squadId));
-      if (squad.members.length > 0) {
-        await tx
-          .insert(schema.squadMember)
-          .values(squad.members.map((key) => ({ squadId, riderId: riderIds.get(key)! })));
-      }
-      squadMembers += squad.members.length;
     }
 
     return {
@@ -242,6 +231,133 @@ export async function seedClubConfig(db: Db, config: ClubConfig): Promise<SeedCl
   });
 }
 
+function assertScoringTeamsPublished(
+  config: ClubConfig,
+  publishedScoringTeams: Map<number, Set<string>>,
+): void {
+  const published = publishedScoringTeams.get(config.season);
+  if (!published) {
+    throw new ClubConfigError(`the config for ${config.club}`, [
+      `no published scoring teams are recorded for season ${config.season}`,
+    ]);
+  }
+  const unpublished = config.scoringTeams.filter((team) => !published.has(team));
+  if (unpublished.length > 0) {
+    throw new ClubConfigError(
+      `the config for ${config.club}`,
+      unpublished.map(
+        (team) =>
+          `scoring team "${team}" is not one the league published in ${config.season}; seeding it ` +
+          `would drop the team out of the club rollup in silence`,
+      ),
+    );
+  }
+}
+
+async function replaceScoringTeams(
+  tx: Tx,
+  clubId: number,
+  seasonId: number,
+  config: ClubConfig,
+): Promise<void> {
+  await tx
+    .delete(schema.clubScoringTeam)
+    .where(
+      and(eq(schema.clubScoringTeam.clubId, clubId), eq(schema.clubScoringTeam.seasonId, seasonId)),
+    );
+  if (config.scoringTeams.length === 0) return;
+  await tx
+    .insert(schema.clubScoringTeam)
+    .values(config.scoringTeams.map((scoringTeam) => ({ clubId, seasonId, scoringTeam })));
+}
+
+async function replaceRiders(
+  tx: Tx,
+  seasonId: number,
+  config: ClubConfig,
+): Promise<{ riderIds: Map<string, number>; ridersCreated: number; plates: number }> {
+  const riderIds = new Map<string, number>();
+  let ridersCreated = 0;
+  let plates = 0;
+
+  for (const rider of config.riders) {
+    const existingId = await findRiderByPlates(tx, seasonId, rider.plates);
+    let riderId: number;
+    if (existingId === null) {
+      const [row] = await tx
+        .insert(schema.rider)
+        .values({ displayName: rider.displayName })
+        .returning({ id: schema.rider.id });
+      riderId = row!.id;
+      ridersCreated += 1;
+    } else {
+      riderId = existingId;
+      await tx
+        .update(schema.rider)
+        .set({ displayName: rider.displayName })
+        .where(eq(schema.rider.id, riderId));
+    }
+    riderIds.set(rider.key, riderId);
+
+    await tx
+      .delete(schema.riderPlate)
+      .where(and(eq(schema.riderPlate.riderId, riderId), eq(schema.riderPlate.seasonId, seasonId)));
+    if (rider.plates.length > 0) {
+      await tx.insert(schema.riderPlate).values(
+        rider.plates.map((binding) => ({
+          riderId,
+          seasonId,
+          plate: binding.plate,
+          fromRoundOrdinal: binding.fromRound,
+          toRoundOrdinal: binding.toRound,
+        })),
+      );
+    }
+    plates += rider.plates.length;
+  }
+
+  return { riderIds, ridersCreated, plates };
+}
+
+async function replaceSquads(
+  tx: Tx,
+  clubId: number,
+  config: ClubConfig,
+  riderIds: Map<string, number>,
+): Promise<number> {
+  const names = config.squads.map((squad) => squad.name);
+  await tx
+    .delete(schema.squad)
+    .where(
+      names.length === 0
+        ? eq(schema.squad.clubId, clubId)
+        : and(eq(schema.squad.clubId, clubId), notInArray(schema.squad.name, names)),
+    );
+
+  let squadMembers = 0;
+  for (const squad of config.squads) {
+    const squadId = await upsertSquad(tx, clubId, squad.name);
+    await tx.delete(schema.squadMember).where(eq(schema.squadMember.squadId, squadId));
+    if (squad.members.length > 0) {
+      await tx
+        .insert(schema.squadMember)
+        .values(squad.members.map((key) => ({ squadId, riderId: riderIds.get(key)! })));
+    }
+    squadMembers += squad.members.length;
+  }
+  return squadMembers;
+}
+
+/** The riders this club can currently reach, which is through its squads. */
+async function ridersInClubSquads(tx: Tx, clubId: number): Promise<Set<number>> {
+  const rows = await tx
+    .select({ riderId: schema.squadMember.riderId })
+    .from(schema.squadMember)
+    .innerJoin(schema.squad, eq(schema.squad.id, schema.squadMember.squadId))
+    .where(eq(schema.squad.clubId, clubId));
+  return new Set(rows.map((row) => row.riderId));
+}
+
 async function upsertSeason(tx: Tx, year: number): Promise<number> {
   const existing = await tx.select().from(schema.season).where(eq(schema.season.year, year));
   if (existing[0]) return existing[0].id;
@@ -249,10 +365,17 @@ async function upsertSeason(tx: Tx, year: number): Promise<number> {
   return row!.id;
 }
 
-async function upsertClub(tx: Tx, name: string): Promise<number> {
-  const existing = await tx.select().from(schema.club).where(eq(schema.club.name, name));
+/**
+ * Look up before inserting rather than upserting, so a second run reuses the
+ * existing id instead of burning one from the serial sequence.
+ */
+async function upsertClub(executor: Executor, name: string): Promise<number> {
+  const existing = await executor.select().from(schema.club).where(eq(schema.club.name, name));
   if (existing[0]) return existing[0].id;
-  const [row] = await tx.insert(schema.club).values({ name }).returning({ id: schema.club.id });
+  const [row] = await executor
+    .insert(schema.club)
+    .values({ name })
+    .returning({ id: schema.club.id });
   return row!.id;
 }
 
@@ -277,7 +400,7 @@ async function upsertSquad(tx: Tx, clubId: number, name: string): Promise<number
 async function findRiderByPlates(
   tx: Tx,
   seasonId: number,
-  plates: { plate: string; fromRound: number | null; toRound: number | null }[],
+  plates: PlateBinding[],
 ): Promise<number | null> {
   if (plates.length === 0) return null;
   const rows = await tx
@@ -295,12 +418,12 @@ async function findRiderByPlates(
 
   const matches = rows.filter((row) =>
     plates.some(
-      (p) =>
-        p.plate === row.plate &&
-        (p.fromRound ?? Number.NEGATIVE_INFINITY) <=
-          (row.toRoundOrdinal ?? Number.POSITIVE_INFINITY) &&
-        (row.fromRoundOrdinal ?? Number.NEGATIVE_INFINITY) <=
-          (p.toRound ?? Number.POSITIVE_INFINITY),
+      (binding) =>
+        binding.plate === row.plate &&
+        plateWindowsOverlap(binding, {
+          fromRound: row.fromRoundOrdinal,
+          toRound: row.toRoundOrdinal,
+        }),
     ),
   );
 

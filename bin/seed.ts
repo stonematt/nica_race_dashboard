@@ -27,7 +27,7 @@ import { ClubConfigError, loadClubConfig } from '../src/lib/club-config.ts';
 import { createDb } from '../src/lib/db/index.ts';
 import { NotAllowlistedError, seedAdmin, seedClubConfig } from '../src/lib/seed.ts';
 
-/** The value after `--name`, or undefined when the flag is a bare switch. */
+/** The value following `--<name>`, or undefined when the flag is a bare switch. */
 function flag(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return undefined;
