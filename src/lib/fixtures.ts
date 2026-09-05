@@ -26,7 +26,19 @@ import { fileURLToPath } from 'node:url';
 /** The corpus directory name, relative to the repo root. */
 export const CORPUS_DIRNAME = 'fixtures';
 
-/** Seasons the corpus carries. 2025 is the full Oregon League season; 2026 is the opener. */
+/**
+ * Seasons the corpus carries. 2025 is the full Oregon League season; 2026 is the opener.
+ *
+ * Declared rather than discovered off disk on purpose, and this is not the same removal
+ * #30 made. The corpus is hand-fetched and hand-placed, never generated, so a directory
+ * showing up under `fixtures/` is not evidence a season is ready to read — a half-finished
+ * copy, a typo'd rename, a stray extraction — all look identical to a real season to a
+ * scan that just lists what is on disk. `hasCorpus()` already leans on this list rather
+ * than on the filesystem to decide whether the corpus is present at all; a season that
+ * silently discovered itself would make that check pass on a corpus nobody meant to
+ * declare ready. Adding a season is a one-line, reviewable diff here, which is the
+ * point — do not replace this with a `readdirSync(root)` scan.
+ */
 export const CORPUS_SEASONS = ['2025', '2026'] as const;
 
 let cachedRepoRoot: string | undefined;
