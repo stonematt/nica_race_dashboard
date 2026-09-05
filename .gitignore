@@ -14,6 +14,15 @@ coverage/
 data/
 fixtures/
 
+# The trailing-slash patterns above match a real directory named `data` or
+# `fixtures` but not a symlink of the same name — a symlink is a file to git,
+# not a directory. A worktree that symlinks the corpus in rather than copying
+# it (docs/fixtures.md) hits exactly this gap: `git status` reports the
+# symlink untracked and `git add .` stages it. These root-anchored, no-slash
+# entries catch the symlink form too. See #52.
+/data
+/fixtures
+
 .env
 .env.*
 !.env.example

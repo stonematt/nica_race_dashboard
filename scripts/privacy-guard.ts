@@ -14,8 +14,14 @@
  *
  * Three rules, narrowest first:
  *
- *   1. Nothing under `fixtures/` or `data/` is ever tracked. Blunt, certain,
- *      and cheap.
+ *   1. Nothing under `fixtures/` or `data/` is ever tracked, and neither path
+ *      is ever tracked by itself either — a symlink named exactly `fixtures`
+ *      or `data` is a file to git, not a directory, so a prefix check alone
+ *      misses it (#52). This is a path check, so it does not follow an
+ *      arbitrarily-named symlink into a corpus directory; the pre-commit hook
+ *      has the same blind spot, on purpose — a payload reached that way
+ *      through a *tracked* file still gets read and scanned by rules 2 and 3
+ *      below.
  *   2. A tracked RaceResult-shaped payload must carry NO rows. This is the rule
  *      that guards the committed shape corpus (#31): a stripper regression that
  *      starts emitting real rows fails the build rather than publishing them.
@@ -34,7 +40,12 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-/** Directories whose contents are never committed. */
+/**
+ * Directories whose contents are never committed. Rule 1 also rejects the
+ * bare path with the trailing slash stripped — `fixtures`, `data` — so a
+ * tracked symlink of that exact name is caught the same way a tracked
+ * directory of that name is. See rule 1's doc above.
+ */
 export const FORBIDDEN_PREFIXES = ['fixtures/', 'data/'];
 
 /** Only these get read for name shapes; everything else is prose or code. */
@@ -216,12 +227,17 @@ export function scan(files: ScannedFile[]): Finding[] {
   const findings: Finding[] = [];
 
   for (const { path, content } of files) {
-    const forbidden = FORBIDDEN_PREFIXES.find((prefix) => path.startsWith(prefix));
+    const forbidden = FORBIDDEN_PREFIXES.find(
+      (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
+    );
     if (forbidden !== undefined) {
       findings.push({
         path,
         rule: 'tracked-corpus-path',
-        detail: `tracked under ${forbidden}, which is never committed`,
+        detail:
+          path === forbidden.slice(0, -1)
+            ? `tracked as \`${path}\` itself — a symlink or file with this exact name is never committed`
+            : `tracked under ${forbidden}, which is never committed`,
       });
       continue;
     }

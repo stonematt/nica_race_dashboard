@@ -40,6 +40,36 @@ describe('the tracked-corpus-path rule', () => {
       1,
     );
   });
+
+  it('refuses a tracked path named exactly `fixtures`, with no trailing slash', () => {
+    // #52: the prefix check on `fixtures/` never matches the bare path
+    // `fixtures` at all, which is exactly what a symlink is tracked as.
+    expect(scan([{ path: 'fixtures', content: '' }]).map((f) => f.rule)).toEqual([
+      'tracked-corpus-path',
+    ]);
+  });
+
+  it('refuses a tracked path named exactly `data` too', () => {
+    expect(scan([{ path: 'data', content: '' }]).map((f) => f.rule)).toEqual([
+      'tracked-corpus-path',
+    ]);
+  });
+
+  it('refuses a tracked symlink named `fixtures`, whatever it points at', () => {
+    // A symlink is a file to git — `git ls-files` reports it at the bare path
+    // `fixtures`, no trailing slash, same as the case above. What the symlink
+    // resolves to is irrelevant to this rule; the path itself is the finding.
+    expect(
+      scan([{ path: 'fixtures', content: '~/.local/share/nica_race_dashboard/fixtures' }]).map(
+        (f) => f.rule,
+      ),
+    ).toEqual(['tracked-corpus-path']);
+  });
+
+  it('leaves an unrelated file with "fixtures" in its name alone', () => {
+    // docs/fixtures.md is prose about the corpus, not a path under it.
+    expect(scan([{ path: 'docs/fixtures.md', content: '# Fixture corpus\n' }])).toEqual([]);
+  });
 });
 
 describe('the payload-rows rule', () => {
