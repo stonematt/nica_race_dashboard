@@ -10,7 +10,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import * as schema from '../db/schema.ts';
 import { createTestDb, type TestDatabase } from '../db/testing.ts';
 import { CONFIG_LIST_NAME, archive } from './raw.ts';
-import { countRows, normalize, NormalizeError } from './normalize.ts';
+import { countRows } from './decode.ts';
+import { normalize, NormalizeError } from './normalize.ts';
 import { buildSnapshot } from './snapshot.ts';
 
 const PLACE_2025 =
@@ -256,6 +257,63 @@ describe('normalize', () => {
     ]);
 
     expect((await normalize(db)).individualRows).toBe(1);
+  });
+
+  it('classifies the expressions of a list it drops, not only the one it decodes', async () => {
+    // The Mode tie-break drops a list; it must not drop it out of strict
+    // unknown-expression fatality too. Otherwise the corpus is only partly
+    // classified and the next layout change hides behind a hidden list.
+    await seed([
+      configRecord(
+        '359478',
+        config('359478', [
+          { ID: 'AAA111', Name: 'flat' },
+          { ID: 'TTT333', Name: 'prologue', Mode: 'hidden' },
+        ]),
+      ),
+      listRecord(
+        '359478',
+        'AAA111',
+        listPayload(FLAT_FIELDS, { '#1_HS1 Boys - North': [row('101', '1')] }),
+      ),
+      listRecord(
+        '359478',
+        'TTT333',
+        listPayload([...TT_FIELDS, 'SomethingNew'], {
+          '#1_HS1 Boys - North': [[...ttRow('101'), 'x']],
+        }),
+      ),
+    ]);
+
+    await expect(normalize(db)).rejects.toThrow(/unrecognized expression\(s\): SomethingNew/);
+  });
+
+  it('does not classify the expressions of a family it has no decoder for', async () => {
+    // #25's families are recognized by signature only. Halting on their
+    // unclassified columns would make this ticket unlandable.
+    await seed([
+      configRecord(
+        '359478',
+        config('359478', [
+          { ID: 'AAA111', Name: 'flat' },
+          { ID: 'BBB222', Name: 'by team' },
+        ]),
+      ),
+      listRecord(
+        '359478',
+        'AAA111',
+        listPayload(FLAT_FIELDS, { '#1_HS1 Boys - North': [row('101', '1')] }),
+      ),
+      listRecord(
+        '359478',
+        'BBB222',
+        listPayload([...BY_TEAM_FIELDS, 'DisplayPoints'], {
+          hs: { d1: { team: [['101', 'M', '9', 'B;', '39:37.12', '500']] } },
+        }),
+      ),
+    ]);
+
+    expect((await normalize(db)).skipped).toBe(1);
   });
 
   it('is fatal when two published lists claim the same family', async () => {

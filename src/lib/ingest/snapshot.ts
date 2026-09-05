@@ -17,6 +17,7 @@
  * snapshot diff that silently changes meaning is worse than no snapshot.
  */
 
+import { FAMILIES } from './families.ts';
 import type { PlacedList } from './normalize.ts';
 
 export interface SnapshotList {
@@ -95,5 +96,11 @@ export function buildSnapshot(placed: readonly PlacedList[]): IngestSnapshot {
     family.expressions = [...new Set(family.lists.flatMap((list) => list.expressions))].sort();
   }
 
-  return { version: 1, families: [...families.values()] };
+  // Declaration order, not first-appearance order: a new event must not be
+  // able to reorder the array and turn #31's diff into noise.
+  const ordered = FAMILIES.map((family) => families.get(family.name)).filter(
+    (family) => family !== undefined,
+  );
+
+  return { version: 1, families: ordered };
 }

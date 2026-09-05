@@ -231,6 +231,16 @@ describe('decodeIndividualFlat', () => {
     expect(() => decode(payload)).toThrow(/required field\(s\) scoringTeam/);
   });
 
+  it('refuses a points value that is not an integer rather than nulling it', () => {
+    // `points` has no verbatim sibling the way `time_raw` sits beside
+    // `time_seconds`, so a value that failed to parse would simply vanish.
+    const upgraded = [...winner];
+    upgraded[5] = 'Upgrade';
+
+    expect(() => decode(massStart([upgraded]))).toThrow(DecodeError);
+    expect(() => decode(massStart([upgraded]))).toThrow(/points is "Upgrade"/);
+  });
+
   it('is fatal when a row is not DataFields wide', () => {
     expect(() => decode(massStart([winner.slice(0, 12)]))).toThrow(ColumnError);
   });

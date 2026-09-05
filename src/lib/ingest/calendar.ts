@@ -6,7 +6,12 @@
  * All three come from one string — the config's `eventname` — because that is
  * the only place the source states which race a payload belongs to.
  *
- * **Why a round exists at all.** A league race is not a RaceResult event. 2025
+ * **Why a round exists at all**, when a result row only needs an `event`.
+ * `event.round_id` is `NOT NULL` and references `round`, and `round.season_id`
+ * references `season`, so the frozen schema requires all three before a single
+ * result can be written. It is not an extra: it is the shape of the FK.
+ *
+ * A league race is not a RaceResult event. 2025
  * Race 2 is two events (`359477` South, `359478` North); the Prologue is one
  * event carrying both conferences as a category suffix; State Champs is one
  * event with no suffix. Meanwhile the season standings publish `RACE1..RACE4`,

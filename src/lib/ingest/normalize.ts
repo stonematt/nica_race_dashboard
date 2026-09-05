@@ -30,8 +30,15 @@ import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from '../db/schema.ts';
 import { readCatalog, type EventCatalog } from './catalog.ts';
 import { readEventIdentity, upsertEvent } from './calendar.ts';
-import { readColumnLayout, type DisplayField } from './columns.ts';
-import { dataDepth, decodeIndividualFlat, type DecodedList, type ListPayload } from './decode.ts';
+import {
+  checkExpressionsRecognized,
+  countRows,
+  dataDepth,
+  decodeIndividualFlat,
+  readListLayout,
+  type DecodedList,
+  type ListPayload,
+} from './decode.ts';
 import { IngestError } from './errors.ts';
 import { assignFamily, INDIVIDUAL_FLAT, type Family, type LayoutVariant } from './families.ts';
 import { latestPayloads, type ArchivedPayload } from './raw.ts';
@@ -76,16 +83,6 @@ export interface NormalizeResult {
   placed: PlacedList[];
 }
 
-/** Rows under a `data` object at any nesting depth, counted not decoded. */
-export function countRows(data: unknown): number {
-  if (Array.isArray(data)) return data.length;
-  if (data === null || typeof data !== 'object') return 0;
-  return Object.values(data as Record<string, unknown>).reduce<number>(
-    (total, group) => total + countRows(group),
-    0,
-  );
-}
-
 function listPayloadOf(where: string, payload: unknown): ListPayload {
   if (payload === null || typeof payload !== 'object') {
     throw new NormalizeError(`${where}: archived payload is not an object.`);
@@ -103,17 +100,15 @@ function placeLists(
   return lists.map((row) => {
     const where = `event ${eventId} list ${row.listId} (${row.listName})`;
     const payload = listPayloadOf(where, row.payload);
-
-    const dataFields = payload.DataFields;
-    if (!Array.isArray(dataFields) || !dataFields.every((f) => typeof f === 'string')) {
-      throw new NormalizeError(`${where}: DataFields is not an array of strings.`);
-    }
-    const fields = Array.isArray(payload.list?.Fields)
-      ? (payload.list.Fields as DisplayField[])
-      : [];
-
-    const layout = readColumnLayout(where, dataFields, fields);
+    const layout = readListLayout(where, payload);
     const { family, variant } = assignFamily(where, layout, dataDepth(payload.data));
+
+    // Strict unknown-expression fatality covers every list of a decoded
+    // family, not only the one that ends up feeding the table. Otherwise a
+    // list dropped by the Mode tie-break — the two hidden prologue re-renders
+    // — would carry unclassified expressions that nothing ever checks, and the
+    // corpus would only be *partly* classified.
+    if (family.decoded) checkExpressionsRecognized(where, layout);
 
     return {
       season,
@@ -122,7 +117,7 @@ function placeLists(
       listName: row.listName,
       family,
       variant,
-      expressions: dataFields,
+      expressions: layout.dataFields,
       rowCount: countRows(payload.data),
       hidden: catalog.lists.find((list) => list.id === row.listId)?.mode === 'hidden',
       decoded: false,
@@ -132,6 +127,9 @@ function placeLists(
 
 /**
  * The one list of an event that feeds a decoded family.
+ *
+ * Takes the family so its error names which one is ambiguous — there is one
+ * decoded family today and #25 adds five more.
  *
  * Two lists can land in the same family in one event: the config advertises the
  * prologue time-trial list at all eight 2025 events, and at three of them it was
@@ -241,7 +239,6 @@ export async function normalize(db: Db): Promise<NormalizeResult> {
     }
 
     const chosen = soleListFor(eventId, INDIVIDUAL_FLAT, spine);
-    chosen.decoded = true;
     const chosenRow = rows.find((row) => row.listId === chosen.listId)!;
     const decoded = decodeIndividualFlat(
       `event ${eventId} list ${chosen.listId} (${chosen.listName})`,
@@ -250,11 +247,13 @@ export async function normalize(db: Db): Promise<NormalizeResult> {
     );
 
     result.individualRows += await writeEvent(db, configRow.season, eventId, catalog, decoded);
+
+    const recorded = placed.map((list) => ({ ...list, decoded: list.listId === chosen.listId }));
     result.events += 1;
-    result.lists += placed.length;
-    result.decodedLists += placed.filter((list) => list.decoded).length;
-    result.skipped += placed.filter((list) => !list.decoded).length;
-    result.placed.push(...placed);
+    result.lists += recorded.length;
+    result.decodedLists += recorded.filter((list) => list.decoded).length;
+    result.skipped += recorded.filter((list) => !list.decoded).length;
+    result.placed.push(...recorded);
   }
 
   return result;

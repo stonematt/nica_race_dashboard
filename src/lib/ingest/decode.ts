@@ -98,6 +98,33 @@ export function dataDepth(data: unknown): number {
   return inner < 0 ? -1 : inner + 1;
 }
 
+/** Rows under a `data` object at any nesting depth, counted not decoded. */
+export function countRows(data: unknown): number {
+  if (Array.isArray(data)) return data.length;
+  if (data === null || typeof data !== 'object') return 0;
+  return Object.values(data as Record<string, unknown>).reduce<number>(
+    (total, group) => total + countRows(group),
+    0,
+  );
+}
+
+/**
+ * The column layout of a list payload.
+ *
+ * One reader, used both when a list is placed into a family and when it is
+ * decoded, so the two cannot disagree about what a payload's columns are or
+ * report the same drift as two different errors.
+ */
+export function readListLayout(where: string, payload: ListPayload): ColumnLayout {
+  const dataFields = payload.DataFields;
+  if (!Array.isArray(dataFields) || !dataFields.every((f) => typeof f === 'string')) {
+    throw new DecodeError(`${where}: DataFields is not an array of strings.`);
+  }
+  const fields = Array.isArray(payload.list?.Fields) ? (payload.list.Fields as DisplayField[]) : [];
+
+  return readColumnLayout(where, dataFields, fields);
+}
+
 /** Every `(groupKey, row)` pair under a depth-1 `data` object, in payload order. */
 function* depthOneRows(where: string, data: unknown): Generator<[string, unknown[]]> {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
@@ -142,15 +169,32 @@ export function parseTimeSeconds(raw: string): number | null {
   return seconds;
 }
 
+/** The four lap-split columns, in order. The 2026 layout publishes only two. */
+const LAP_FIELDS = ['lap1', 'lap2', 'lap3', 'lap4'] as const satisfies readonly IndividualField[];
+
 /** An empty cell carries no value. A published sentinel like `-` is a value. */
 function cellOrNull(value: string | undefined): string | null {
   return value === undefined || value === '' ? null : value;
 }
 
-function parseIntOrNull(value: string | null): number | null {
+/**
+ * An integer cell, or null when the source left it empty.
+ *
+ * Refuses anything else rather than returning null. `points` has no verbatim
+ * sibling column the way `time_raw` sits beside `time_seconds`, so a published
+ * value that failed to parse would simply vanish — which is the one thing a
+ * fidelity layer may never do.
+ */
+function parseIntOrRefuse(where: string, field: string, value: string | null): number | null {
   if (value === null) return null;
   const parsed = Number(value);
-  return Number.isInteger(parsed) ? parsed : null;
+  if (!Number.isInteger(parsed)) {
+    throw new DecodeError(
+      `${where}: ${field} is "${value}", which is not an integer. ` +
+        'There is no verbatim column to fall back on, so this cannot be stored as null.',
+    );
+  }
+  return parsed;
 }
 
 /**
@@ -160,7 +204,7 @@ function parseIntOrNull(value: string | null): number | null {
  * canonical field *or* on the ignore list; an expression nobody has classified
  * halts the event rather than being decoded around.
  */
-function checkExpressionsRecognized(where: string, layout: ColumnLayout): void {
+export function checkExpressionsRecognized(where: string, layout: ColumnLayout): void {
   const known = new Set<string>(INDIVIDUAL_FLAT_IGNORED);
   for (const aliases of Object.values(INDIVIDUAL_FLAT_ALIASES)) {
     for (const alias of aliases) known.add(alias);
@@ -265,9 +309,9 @@ export function decodeIndividualFlat(
       throw new DecodeError(`${where}: row ${rowNumber} in "${groupKey}" has no name.`);
     }
 
-    const laps = [at(row, 'lap1'), at(row, 'lap2'), at(row, 'lap3'), at(row, 'lap4')];
-    const hasLapColumns = laps.some((_, i) => columns[`lap${i + 1}` as IndividualField] !== null);
-    const publishedLaps = parseIntOrNull(at(row, 'laps'));
+    const laps = LAP_FIELDS.map((field) => at(row, field));
+    const hasLapColumns = LAP_FIELDS.some((field) => columns[field] !== null);
+    const publishedLaps = parseIntOrRefuse(where, 'the lap count', at(row, 'laps'));
 
     rows.push({
       plate,
@@ -283,13 +327,17 @@ export function decodeIndividualFlat(
       categoryGender: category.gender,
       conference: category.conference,
       place,
+      // The source encodes a DNF two ways: the mass-start lists put `*` in
+      // place and `DNF` in time, while the time trial puts `DNF` in place and
+      // still publishes a real time. Both are read; neither is rewritten.
+      //
       // `lapped` is a property of the field, not of the row: it needs the
       // category's leading lap count, which no single row carries. It is
       // derived in v_race_result. Ingest writes only what one row can say.
       status: place === '*' || place === 'DNF' || timeRaw === 'DNF' ? 'dnf' : 'finished',
       timeRaw,
       timeSeconds: parseTimeSeconds(timeRaw)?.toString() ?? null,
-      points: parseIntOrNull(at(row, 'points')),
+      points: parseIntOrRefuse(where, 'points', at(row, 'points')),
       laps:
         publishedLaps ??
         (hasLapColumns ? laps.filter((lap) => lap !== null && lap !== '-').length : null),
