@@ -45,7 +45,7 @@ export const REQUEST_SPACING_MS = 3000;
  * anything.
  */
 export const USER_AGENT =
-  'nica_race_dashboard/0.1 (hand-run ingest; +https://github.com/stonematt/nica_race_dashboard)';
+  'bike_race_results/0.1 (hand-run ingest; +https://github.com/stonematt/bike_race_results)';
 
 /** One request, as the transport receives it. */
 export interface SourceRequest {

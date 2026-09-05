@@ -22,7 +22,7 @@ Two things stayed outside the tree, because nothing in the repo reads them
 programmatically:
 
 ```
-~/.local/share/nica_race_dashboard/
+~/.local/share/bike_race_results/
 ├── refs/        Oregon NICA Handbook + 2026 Category Placement Table (PDF + text)
 └── analysis/    Full resolution write-ups for the closed wayfinder tickets
 ```
@@ -44,12 +44,12 @@ const config = corpusPath('2026', 'config-418436.json');
 
 `corpusPath()` refuses a path that climbs out of `fixtures/`. Do not add an environment
 override — reintroducing machine-local configuration is exactly what
-[#30](https://github.com/stonematt/nica_race_dashboard/issues/30) removed.
+[#30](https://github.com/stonematt/bike_race_results/issues/30) removed.
 
 ### Getting a copy
 
 Copy `fixtures/` from another checkout of yours, or from
-`~/.local/share/nica_race_dashboard/fixtures/`. Without it, `pnpm test` still passes in
+`~/.local/share/bike_race_results/fixtures/`. Without it, `pnpm test` still passes in
 full; only `pnpm test:local` needs it.
 
 In a git worktree, copying means a second 1.7M copy of the corpus, which is what makes
@@ -63,13 +63,13 @@ echo fixtures >> .git/info/exclude
 ```
 
 That makes staging it impossible without `git add -f`, the same as the copied form. See
-[#52](https://github.com/stonematt/nica_race_dashboard/issues/52).
+[#52](https://github.com/stonematt/bike_race_results/issues/52).
 
 ## Why it is ignored rather than committed
 
 **This repository is public and the payloads contain minors' full names, schools, grades
 and finish times.** The privacy ceiling set in
-[#3](https://github.com/stonematt/nica_race_dashboard/issues/3) is that named data is
+[#3](https://github.com/stonematt/bike_race_results/issues/3) is that named data is
 never rendered without auth and never leaves a local file without an explicit decision.
 
 The corpus used to live outside the working tree entirely, which made an accidental
@@ -102,7 +102,7 @@ tree does not trip it, and applies three rules:
 
 1. Nothing under `fixtures/` or `data/` is ever tracked.
 2. A tracked RaceResult-shaped payload must carry no rows — the rule that guards the
-   committed shape corpus ([#31](https://github.com/stonematt/nica_race_dashboard/issues/31)),
+   committed shape corpus ([#31](https://github.com/stonematt/bike_race_results/issues/31)),
    so a stripper regression that starts emitting real rows fails the build instead of
    publishing them.
 3. No tracked JSON or CSV holds a name-shaped value **where a person goes**: a positional
@@ -129,7 +129,7 @@ every `Orders[].Grouping`, `ListName`, `ListFooterText`, the config's list
 catalog, and the `data` nesting with an integer row count where the rows were.
 One file per event config and one per published list — 248K today, and **not one
 row**. Issue
-[#31](https://github.com/stonematt/nica_race_dashboard/issues/31).
+[#31](https://github.com/stonematt/bike_race_results/issues/31).
 
 It exists because drift detection is the part of ingest with no human in the
 loop, and every refusal it makes — family signature matching, alias collision,
@@ -177,11 +177,11 @@ remembering. `scripts/test-lanes.test.ts` asks vitest which files each lane coll
 fails if that ever stops being true.
 
 The split, and the decision not to run fidelity tests in CI at all, is
-[#29](https://github.com/stonematt/nica_race_dashboard/issues/29). Encrypted fixtures with
+[#29](https://github.com/stonematt/bike_race_results/issues/29). Encrypted fixtures with
 a CI secret were considered and rejected: full coverage is not worth putting minors' data
 one leaked secret away from a public repo. Drift detection runs in CI instead, against a
 committed shape corpus with no rows in it
-([#31](https://github.com/stonematt/nica_race_dashboard/issues/31)).
+([#31](https://github.com/stonematt/bike_race_results/issues/31)).
 
 ## If payloads ever get committed
 
@@ -210,7 +210,7 @@ Note what is _not_ on this list: rotating a secret. There is nothing to rotate.
 ## Re-fetching
 
 Two GETs per event; see
-[#2](https://github.com/stonematt/nica_race_dashboard/issues/2) and its 2026 addendum for
+[#2](https://github.com/stonematt/bike_race_results/issues/2) and its 2026 addendum for
 the exact sequence. **Note that 2025 and 2026 use different paths** — the 2026 config
 endpoint moved, and the list catalog moved inside the config. Be polite: serial requests,
 real User-Agent, 3s spacing, back off on any non-200.

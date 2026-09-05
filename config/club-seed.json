@@ -12,7 +12,7 @@
     "file every rider seeds as its own pseudonym (rider-a seeds as «RIDER-A»), the redaction form",
     "docs/fixtures.md names.",
     "",
-    "    ~/.local/share/nica_race_dashboard/config/rider-names.json",
+    "    ~/.local/share/bike_race_results/config/rider-names.json",
     "    { \"rider-a\": \"Firstname Lastname\", ... }",
     "",
     "The roster below is the club's 2025 plate set as the league published it, one rider per plate.",

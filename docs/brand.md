@@ -8,7 +8,7 @@ in the sibling repo [`stonematt/scd-brand`](https://github.com/stonematt/scd-bra
 it describes, are the whole of the brand information available to anyone who is not the
 owner. Everything below is written to be usable without `DESIGN.md` in hand.
 
-Decided in [#13](https://github.com/stonematt/nica_race_dashboard/issues/13).
+Decided in [#13](https://github.com/stonematt/bike_race_results/issues/13).
 
 ## How the tokens get here: a vendored copy
 
@@ -16,14 +16,14 @@ The `:root` block in `DESIGN.md` is hand-copied into the `@theme` block of
 `src/app/globals.css`. Not a submodule, not a package.
 
 The reason is the visibility split. A submodule in a public repo pointing at a private URL
-fails for every clone that is not the owner's — including CI ([#28](https://github.com/stonematt/nica_race_dashboard/issues/28)),
+fails for every clone that is not the owner's — including CI ([#28](https://github.com/stonematt/bike_race_results/issues/28)),
 which would need a deploy key to a private repo in order to fetch fifteen lines of CSS. A
 private npm package needs a registry and a token for the same payload. The design system is
 marked APPROVED and changes at roughly the rate the team reprints jerseys, so continuous
 synchronisation buys nothing and costs auth on every clone.
 
 There is no token build step. Tailwind 4's `@theme` **is** CSS custom properties and takes
-OKLch natively ([#6](https://github.com/stonematt/nica_race_dashboard/issues/6)), so the
+OKLch natively ([#6](https://github.com/stonematt/bike_race_results/issues/6)), so the
 values transfer as they are; only the names change, to Tailwind's `--color-*` / `--font-*`
 namespace.
 
@@ -61,13 +61,13 @@ Anton (display) and Nunito (body), self-hosted via `next/font/google` in
 `src/app/layout.tsx`. Not a CDN link.
 
 The deciding reason is operational, not aesthetic: **this app is opened at race venues** on
-shared wifi, bound to loopback ([#33](https://github.com/stonematt/nica_race_dashboard/issues/33)).
+shared wifi, bound to loopback ([#33](https://github.com/stonematt/bike_race_results/issues/33)).
 A `fonts.gstatic.com` link makes every page load wait on the venue's network, and produces
 a flash of fallback text or a hang on a page whose whole job is being readable in a parking
 lot. `next/font` downloads the faces at build time and serves them from the app's own
 origin, so the page renders correctly with the network unplugged.
 
-Privacy agrees. [#3](https://github.com/stonematt/nica_race_dashboard/issues/3)'s posture is
+Privacy agrees. [#3](https://github.com/stonematt/bike_race_results/issues/3)'s posture is
 `noindex` and no third-party requests; a CDN font would send every coach's IP and referer to
 Google on every page view.
 
@@ -91,7 +91,7 @@ voice spec, jersey and print Pantones, the source-file inventory — stays a poi
 - **Navy ground for the banner**, with orange taking the wordmark, the rule, and the marks
   that matter — our dots on the field strip, the fastest lap, the headline number. This is
   the logo's own primary colorway and it is the map's standing palette decision
-  ([#1](https://github.com/stonematt/nica_race_dashboard/issues/1)).
+  ([#1](https://github.com/stonematt/bike_race_results/issues/1)).
 - Aqua is light and takes dark text. Navy and brown take white.
 
 ## Assets: what may live in this public repo
@@ -133,4 +133,4 @@ Then either delete `bin/brand-check.ts` and its `brand:check` script, or repoint
 leaving it in place is harmless.
 
 Note that this is a _reskin_, not multi-league support. The data model is Oregon-only by
-decision ([#1](https://github.com/stonematt/nica_race_dashboard/issues/1), out of scope).
+decision ([#1](https://github.com/stonematt/bike_race_results/issues/1), out of scope).
