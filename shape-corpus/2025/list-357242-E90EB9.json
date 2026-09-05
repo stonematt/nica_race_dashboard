@@ -1,0 +1,99 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "357242",
+    "listId": "E90EB9",
+    "hidden": true,
+    "groups": {
+      "#1_group-1-1": {
+        "#1_group-2-1": 6,
+        "#2_group-2-2": 39
+      }
+    }
+  },
+  "list": {
+    "ListName": "03 - Season Overall Results|Team Results - Overall",
+    "ListFooterText": "",
+    "Fields": [
+      {
+        "Expression": "switch([TS197.RANK]>0;[TS197.RANK];[TS297.RANK]>0;[TS297.RANK];[TS397.RANK]>0;[TS397.RANK])"
+      },
+      {
+        "Expression": "CLUB"
+      },
+      {
+        "Expression": "choose([Division];[TS101.TIME1];[TS201.TIME1];[TS301.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS102.TIME1];[TS202.TIME1];[TS302.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS103.TIME1];[TS203.TIME1];[TS303.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS104.TIME1];[TS204.TIME1];[TS304.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS105.TIME1];[TS205.TIME1];[TS305.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS106.TIME1];[TS206.TIME1];[TS306.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS107.TIME1];[TS207.TIME1];[TS307.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS108.TIME1];[TS208.TIME1];[TS308.TIME1])"
+      },
+      {
+        "Expression": "choose([Division];[TS109.TIME1];[TS209.TIME1];[TS309.TIME1])"
+      },
+      {
+        "Expression": "switch([TS197.RANK]>0;[TS197.TIME1];[TS297.RANK]>0;[TS297.TIME1];[TS397.RANK]>0;[TS397.TIME1])"
+      }
+    ],
+    "Orders": [
+      {
+        "Expression": "SchoolType",
+        "Grouping": 1
+      },
+      {
+        "Expression": "switch([TS197.RANK]>0;\"Division 1\";[TS297.RANK]>0;\"Division 2\";[TS397.RANK]>0;\"Divison 3\")& if([IsCompositeTeam];\" Composite Teams\")",
+        "Grouping": 1
+      },
+      {
+        "Expression": "TS197.RANK",
+        "Grouping": 0
+      },
+      {
+        "Expression": "TS297.RANK",
+        "Grouping": 0
+      },
+      {
+        "Expression": "TS397.RANK",
+        "Grouping": 0
+      },
+      {
+        "Expression": "CLUB",
+        "Grouping": 0
+      }
+    ]
+  },
+  "DataFields": [
+    "BIB",
+    "ID",
+    "switch([TS197.RANK]>0;[TS197.RANK];[TS297.RANK]>0;[TS297.RANK];[TS397.RANK]>0;[TS397.RANK])",
+    "CLUB",
+    "choose([Division];[TS101.TIME1];[TS201.TIME1];[TS301.TIME1])",
+    "choose([Division];[TS102.TIME1];[TS202.TIME1];[TS302.TIME1])",
+    "choose([Division];[TS103.TIME1];[TS203.TIME1];[TS303.TIME1])",
+    "choose([Division];[TS104.TIME1];[TS204.TIME1];[TS304.TIME1])",
+    "choose([Division];[TS105.TIME1];[TS205.TIME1];[TS305.TIME1])",
+    "choose([Division];[TS106.TIME1];[TS206.TIME1];[TS306.TIME1])",
+    "choose([Division];[TS107.TIME1];[TS207.TIME1];[TS307.TIME1])",
+    "choose([Division];[TS108.TIME1];[TS208.TIME1];[TS308.TIME1])",
+    "choose([Division];[TS109.TIME1];[TS209.TIME1];[TS309.TIME1])",
+    "switch([TS197.RANK]>0;[TS197.TIME1];[TS297.RANK]>0;[TS297.TIME1];[TS397.RANK]>0;[TS397.TIME1])"
+  ],
+  "data": {}
+}

@@ -1,0 +1,157 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "366186",
+    "listId": "E07F7C",
+    "hidden": false,
+    "groups": {
+      "#1_group-1-1": {
+        "#1_group-2-1": {
+          "#1_group-3-1": 15,
+          "#2_group-3-2": 5,
+          "#3_group-3-3": 19,
+          "#4_group-3-4": 11,
+          "#5_group-3-5": 9,
+          "#6_group-3-6": 12
+        },
+        "#2_group-2-2": {
+          "#7_group-3-7": 5,
+          "#8_group-3-8": 4,
+          "#9_group-3-9": 2,
+          "#10_group-3-10": 4,
+          "#11_group-3-11": 3,
+          "#12_group-3-12": 3,
+          "#13_group-3-13": 5,
+          "#14_group-3-14": 5,
+          "#15_group-3-15": 4,
+          "#16_group-3-16": 2,
+          "#17_group-3-17": 3,
+          "#18_group-3-18": 9,
+          "#19_group-3-19": 3,
+          "#20_group-3-20": 7,
+          "#21_group-3-21": 7,
+          "#22_group-3-22": 4,
+          "#23_group-3-23": 4,
+          "#24_group-3-24": 6,
+          "#25_group-3-25": 2,
+          "#26_group-3-26": 4,
+          "#27_group-3-27": 5,
+          "#28_group-3-28": 2,
+          "#29_group-3-29": 3,
+          "#30_group-3-30": 6,
+          "#31_group-3-31": 1,
+          "#32_group-3-32": 6,
+          "#33_group-3-33": 4,
+          "#34_group-3-34": 4,
+          "#35_group-3-35": 7,
+          "#36_group-3-36": 2,
+          "#37_group-3-37": 3,
+          "#38_group-3-38": 5,
+          "#39_group-3-39": 2,
+          "#40_group-3-40": 3,
+          "#41_group-3-41": 5,
+          "#42_group-3-42": 5,
+          "#43_group-3-43": 5
+        }
+      }
+    }
+  },
+  "list": {
+    "ListName": "02 - Result Lists|Individual Results - By Team",
+    "ListFooterText": "Number of records: 225",
+    "Fields": [
+      {
+        "Expression": "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])"
+      },
+      {
+        "Expression": "if([TransgenderOption]=\"Redundancy\";[RANK5];[RANK1])"
+      },
+      {
+        "Expression": "DisplayBib"
+      },
+      {
+        "Expression": "ucase([DisplayName])"
+      },
+      {
+        "Expression": "CONTEST.NAME"
+      },
+      {
+        "Expression": "SexMF"
+      },
+      {
+        "Expression": "Grade"
+      },
+      {
+        "Expression": "DisplayPoints"
+      },
+      {
+        "Expression": "DisplayLapTime(1)"
+      },
+      {
+        "Expression": "DisplayLapTime(2)"
+      },
+      {
+        "Expression": "DisplayLapTime(3)"
+      },
+      {
+        "Expression": "DisplayLapTime(4)"
+      },
+      {
+        "Expression": "DisplayLapTime(5)"
+      },
+      {
+        "Expression": "TIME20"
+      },
+      {
+        "Expression": "TimeOrStatus"
+      },
+      {
+        "Expression": "NumberOfLaps"
+      }
+    ],
+    "Orders": [
+      {
+        "Expression": "SchoolType",
+        "Grouping": 1
+      },
+      {
+        "Expression": "\"Division \"&[Division]",
+        "Grouping": 1
+      },
+      {
+        "Expression": "[CLUB] & \" - D\" & [Division]",
+        "Grouping": 1
+      },
+      {
+        "Expression": "DECIMALTIME12",
+        "Grouping": 0
+      },
+      {
+        "Expression": "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])",
+        "Grouping": 0
+      }
+    ]
+  },
+  "DataFields": [
+    "BIB",
+    "ID",
+    "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])",
+    "if([TransgenderOption]=\"Redundancy\";[RANK5];[RANK1])",
+    "DisplayBib",
+    "ucase([DisplayName])",
+    "CONTEST.NAME",
+    "SexMF",
+    "Grade",
+    "DisplayPoints",
+    "DisplayLapTime(1)",
+    "DisplayLapTime(2)",
+    "DisplayLapTime(3)",
+    "DisplayLapTime(4)",
+    "DisplayLapTime(5)",
+    "TIME20",
+    "TimeOrStatus",
+    "NumberOfLaps",
+    "iif([TS.SCORED]=1;\"B;\")"
+  ],
+  "data": {}
+}

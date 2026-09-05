@@ -1,0 +1,92 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "359478",
+    "listId": "4F491D",
+    "hidden": true,
+    "groups": {
+      "#1_group-1-1": 1,
+      "#2_group-1-2": 6,
+      "#3_group-1-3": 4,
+      "#4_group-1-4": 11,
+      "#5_group-1-5": 6,
+      "#6_group-1-6": 25,
+      "#7_group-1-7": 21,
+      "#8_group-1-8": 57,
+      "#9_group-1-9": 13,
+      "#10_group-1-10": 11,
+      "#11_group-1-11": 4,
+      "#12_group-1-12": 13,
+      "#13_group-1-13": 21,
+      "#14_group-1-14": 21
+    }
+  },
+  "list": {
+    "ListName": "10 - Prologue Results Lists|Prologue/TT Results ALL",
+    "ListFooterText": "",
+    "Fields": [
+      {
+        "Expression": "RankOrStatusTT"
+      },
+      {
+        "Expression": "BIB"
+      },
+      {
+        "Expression": "FIRSTNAME"
+      },
+      {
+        "Expression": "LASTNAME"
+      },
+      {
+        "Expression": "CLUB"
+      },
+      {
+        "Expression": "Start.TOD"
+      },
+      {
+        "Expression": "End.TOD"
+      },
+      {
+        "Expression": "if([TT_Rank]>0;[T1025])"
+      },
+      {
+        "Expression": "if([T20]>0;[TIME20])"
+      },
+      {
+        "Expression": "TIME"
+      }
+    ],
+    "Orders": [
+      {
+        "Expression": "CONTEST",
+        "Grouping": 0
+      },
+      {
+        "Expression": "CONTEST.NAME",
+        "Grouping": 3
+      },
+      {
+        "Expression": "[TT_Rank]>0",
+        "Grouping": 0
+      },
+      {
+        "Expression": "TT_Rank",
+        "Grouping": 0
+      }
+    ]
+  },
+  "DataFields": [
+    "BIB",
+    "ID",
+    "RankOrStatusTT",
+    "FIRSTNAME",
+    "LASTNAME",
+    "CLUB",
+    "Start.TOD",
+    "End.TOD",
+    "if([TT_Rank]>0;[T1025])",
+    "if([T20]>0;[TIME20])",
+    "TIME"
+  ],
+  "data": {}
+}

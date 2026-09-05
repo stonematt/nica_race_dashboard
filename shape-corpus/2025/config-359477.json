@@ -1,0 +1,46 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "359477",
+    "sourceShape": "2025"
+  },
+  "key": "«KEY»",
+  "eventname": "Race 2 - ORLeague Moore Fun - South",
+  "lists": [
+    {
+      "ID": "7F127B",
+      "Name": "02 - Result Lists|Individual Results - South",
+      "Mode": ""
+    },
+    {
+      "ID": "BF6F16",
+      "Name": "02 - Result Lists|Individual Results - South - By Team",
+      "Mode": ""
+    },
+    {
+      "ID": "1AD78B",
+      "Name": "03 - Season Overall Results|Individual Results - Overall - South",
+      "Mode": ""
+    },
+    {
+      "ID": "674D5B",
+      "Name": "02 - Result Lists|Team Results",
+      "Mode": ""
+    },
+    {
+      "ID": "3A294C",
+      "Name": "02 - Result Lists|Team Results - Detailed",
+      "Mode": ""
+    },
+    {
+      "ID": "227507",
+      "Name": "03 - Season Overall Results|Team Results - Overall - South",
+      "Mode": ""
+    },
+    {
+      "ID": "4F491D",
+      "Name": "10 - Prologue Results Lists|Prologue/TT Results ALL",
+      "Mode": "hidden"
+    }
+  ]
+}
