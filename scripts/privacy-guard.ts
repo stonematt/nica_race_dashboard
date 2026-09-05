@@ -117,13 +117,20 @@ function isRaceResultPayload(value: unknown): value is { DataFields: unknown[]; 
  * grouping rather than as a row in its own right; the earlier one-level
  * `flatMap` treated a nested group object as a single opaque "row", which is
  * what let a correctly stripped nested payload still report rows carried.
+ *
+ * A group that is neither an array nor an object — a bare string, number, or
+ * `null` sitting where a list of rows was expected — still counts as one
+ * opaque row rather than zero. That shape should never occur in a real
+ * payload, but the guard fails toward counting a row it cannot make sense of
+ * rather than silently dropping it: this is the never-narrow rule applied to
+ * the one case recursion could otherwise have quietly zeroed out.
  */
 function rowsOf(data: unknown): unknown[] {
   if (Array.isArray(data)) return data;
   if (typeof data === 'object' && data !== null) {
     return Object.values(data as Record<string, unknown>).flatMap(rowsOf);
   }
-  return [];
+  return data === undefined ? [] : [data];
 }
 
 function looksLikeAName(value: string): boolean {
@@ -231,11 +238,12 @@ export function scan(files: ScannedFile[]): Finding[] {
       (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
     );
     if (forbidden !== undefined) {
+      const bareName = forbidden.slice(0, -1);
       findings.push({
         path,
         rule: 'tracked-corpus-path',
         detail:
-          path === forbidden.slice(0, -1)
+          path === bareName
             ? `tracked as \`${path}\` itself — a symlink or file with this exact name is never committed`
             : `tracked under ${forbidden}, which is never committed`,
       });

@@ -23,8 +23,8 @@
  * on the hex ID (see src/lib/db/schema.ts).
  */
 
-import { IngestError } from './errors.ts';
 import { isRecord } from '../is-record.ts';
+import { IngestError } from './errors.ts';
 
 /** Which API shape a config response came from. */
 export type SourceShape = '2025' | '2026';

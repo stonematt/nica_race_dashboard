@@ -58,6 +58,7 @@
 
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from '../db/schema.ts';
+import { isRecord } from '../is-record.ts';
 import {
   configUrl,
   listUrl,
@@ -66,7 +67,6 @@ import {
   type SourceShape,
 } from './catalog.ts';
 import { IngestError } from './errors.ts';
-import { isRecord } from '../is-record.ts';
 import { archive, CONFIG_LIST_NAME, type RawFetchRecord } from './raw.ts';
 import { REQUEST_SPACING_MS, USER_AGENT, type PoliteClient } from './transport.ts';
 

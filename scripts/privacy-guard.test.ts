@@ -133,6 +133,20 @@ describe('the payload-rows rule', () => {
     expect(finding?.detail).toContain('1 row');
   });
 
+  it('still counts a group that is neither an array nor an object as one row', () => {
+    // Should never occur in a real payload, but the never-narrow rule means
+    // recursing into objects must not quietly zero out a shape rowsOf() does
+    // not recognize — it has to fail toward counting a row, not dropping one.
+    const content = JSON.stringify({
+      DataFields: ['BIB', 'ucase([DisplayName])'],
+      data: { '#1_North': 'not a list of rows', '#2_South': null },
+    });
+    const finding = scan([{ path: 'shape/overall.json', content }]).find(
+      (f) => f.rule === 'payload-rows',
+    );
+    expect(finding?.detail).toContain('2 row');
+  });
+
   it('never echoes the row it found', () => {
     // A failure message is written to a public CI log.
     const findings = scan([{ path: 'shape/overall.json', content: payload([A_ROW]) }]);
