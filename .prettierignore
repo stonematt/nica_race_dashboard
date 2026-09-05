@@ -4,3 +4,4 @@ pnpm-lock.yaml
 src/lib/db/migrations/
 .claude/
 next-env.d.ts
+LICENSE
