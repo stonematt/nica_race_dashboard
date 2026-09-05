@@ -12,12 +12,19 @@
  *   - **Identity is not in the config file.** The repository is public and the
  *     riders are minors, so a rider in `config/club-seed.json` is a stable key
  *     and a plate mapping and nothing that names anyone. Display names arrive
- *     from a separate key -> name map kept *outside* the working tree, the same
- *     place and for the same reason as the payload corpus (docs/fixtures.md).
- *     Out of the tree rather than in `.gitignore`: that makes an accidental
- *     `git add` impossible instead of merely discouraged. With no names file,
- *     every rider takes its own pseudonym — `rider-a` becomes `«RIDER-A»`,
- *     which is the redaction form already used in the issue threads.
+ *     from a separate key -> name map, and that map is kept *outside* the
+ *     working tree, at `~/.local/share/nica_race_dashboard/config/`.
+ *
+ *     Outside rather than in-tree-and-ignored, which is where the payload
+ *     corpus now lives (docs/fixtures.md). The corpus bought its way in with a
+ *     mechanical guard: `.gitignore` plus a pre-commit hook that reads the index
+ *     and rejects any staged path under `fixtures/`. No such guard covers a path
+ *     under `config/`, and until one does, a file of minors' names is safer
+ *     where an accidental `git add` is impossible as a matter of physics rather
+ *     than of a rule someone has to have installed.
+ *
+ *     With no names file, every rider takes its own pseudonym — `rider-a`
+ *     becomes `«RIDER-A»`, the redaction form docs/fixtures.md names.
  *
  *   - **An unpublished scoring team is a hard failure.** Every scoring-team
  *     string is checked against the season's observed set in
@@ -53,8 +60,10 @@ export const publishedScoringTeamsPath = path.join(
 );
 
 /**
- * Where the key -> display name map lives by default. Outside the working tree,
- * beside the payload corpus. `NICA_RIDER_NAMES` overrides it.
+ * Where the key -> display name map lives. Outside the working tree, for the
+ * reason the module comment gives. `--names` on `bin/seed.ts` points elsewhere;
+ * there is deliberately no environment override, which is the machine-local
+ * configuration issue #30 took back out of this repo.
  */
 export const defaultRiderNamesPath = path.join(
   os.homedir(),
@@ -218,10 +227,9 @@ export function parseRiderNames(raw: unknown, source: string): Map<string, strin
   return names;
 }
 
-export function loadRiderNames(file?: string): Map<string, string> {
-  const resolved = file ?? process.env.NICA_RIDER_NAMES ?? defaultRiderNamesPath;
-  if (!fs.existsSync(resolved)) return new Map();
-  return parseRiderNames(readJson(resolved), resolved);
+export function loadRiderNames(file: string = defaultRiderNamesPath): Map<string, string> {
+  if (!fs.existsSync(file)) return new Map();
+  return parseRiderNames(readJson(file), file);
 }
 
 export interface ParseClubConfigOptions {
@@ -466,7 +474,7 @@ export interface LoadClubConfigOptions {
   /** Defaults to the checked-in `config/club-seed.json`. */
   configFile?: string;
   publishedScoringTeamsFile?: string;
-  /** Defaults to `$NICA_RIDER_NAMES`, then the path outside the working tree. */
+  /** Defaults to the path outside the working tree. */
   riderNamesFile?: string;
 }
 

@@ -64,7 +64,6 @@ const tempFile = (name: string, contents: string): string => {
 };
 
 afterEach(() => {
-  delete process.env.NICA_RIDER_NAMES;
   while (tempFiles.length > 0) fs.rmSync(tempFiles.pop()!, { recursive: true, force: true });
 });
 
@@ -300,14 +299,13 @@ describe('rider names, kept outside the working tree', () => {
     expect(problems[0]).toContain('rider-q');
   });
 
-  it('reads the names file named by NICA_RIDER_NAMES', () => {
-    process.env.NICA_RIDER_NAMES = tempFile('names.json', '{"rider-a": "A Rider"}');
-    expect(loadRiderNames().get('rider-a')).toBe('A Rider');
+  it('reads the names file it is pointed at', () => {
+    const file = tempFile('names.json', '{"rider-a": "A Rider"}');
+    expect(loadRiderNames(file).get('rider-a')).toBe('A Rider');
   });
 
   it('treats an absent names file as the normal case, not an error', () => {
-    process.env.NICA_RIDER_NAMES = path.join(os.tmpdir(), 'definitely-not-here.json');
-    expect(loadRiderNames().size).toBe(0);
+    expect(loadRiderNames(path.join(os.tmpdir(), 'definitely-not-here.json')).size).toBe(0);
   });
 
   it('refuses a names file that maps a key to something that is not a name', () => {

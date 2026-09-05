@@ -15,9 +15,9 @@
  * `--club-config` seeds the club, its scoring teams, the roster, the plate
  * mappings and the squads from config/club-seed.json, or from the file named
  * after the flag. Rider display names come from the key -> name map named by
- * `--names`, else `$NICA_RIDER_NAMES`, else the path outside the working tree
- * that src/lib/club-config.ts documents. With no such file every rider seeds as
- * its own pseudonym, because the committed config carries no identity.
+ * `--names`, else from the path outside the working tree that
+ * src/lib/club-config.ts documents. With no such file every rider seeds as its
+ * own pseudonym, because the committed config carries no identity.
  *
  * Given both, the club config runs first so the admin lands on the club it
  * created. Safe to re-run — a second pass changes nothing.
