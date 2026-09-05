@@ -17,6 +17,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FieldStrip } from './FieldStrip.tsx';
+import { NO_AXIS_REASON } from './field-strip.ts';
 import { RiderCardView, SquadSection, UnmappedWarning } from './RaceDetail.tsx';
 import { buildSquadCard, categoryMarks, type RaceResultRow } from './race-detail.ts';
 
@@ -139,6 +140,68 @@ describe('a field with fewer than ten starters', () => {
     const markup = renderCard(small, '«RIDER-D»');
     expect(markup).toContain('7 started, too few to rank');
     expect(markup).not.toContain('top ');
+  });
+});
+
+/*
+ * Issue #60. The corpus prologue is a time trial, so `v_race_result` publishes
+ * no percent back for anyone in the category — the whole field is unplaceable
+ * at once. The strip drew its frame anyway, labelled with the axis floor, on
+ * every one of the event's 25 cards.
+ *
+ * The data layer already asserted the field was all-null and was right to. This
+ * is the other half of that seam: what a coach is shown once it is.
+ */
+describe('a race that published no gap to the winner', () => {
+  const timeTrial = row({
+    pctBack: null,
+    place: '69',
+    fieldSize: 135,
+    fieldTopPct: 29,
+    timeRaw: '53:28.25',
+    lapSplits: [],
+    lapSeconds: [],
+  });
+
+  function renderTimeTrial(): string {
+    const field = [timeTrial, row({ plate: '820', pctBack: null, place: '72' })];
+    const squad = buildSquadCard(
+      'Descenders',
+      [{ row: timeTrial, name: '«RIDER-N»' }],
+      new Map([[timeTrial.category, field]]),
+    );
+    const rider = squad.riders[0]!;
+    return renderToStaticMarkup(<RiderCardView card={rider.card} field={rider.field} />);
+  }
+
+  it('draws no strip, because there is nothing to plot', () => {
+    const markup = renderTimeTrial();
+    expect(markup).not.toContain('<svg');
+    expect(markup).not.toContain('<circle');
+  });
+
+  it('shows no axis percentage, which was the floor and measured nothing', () => {
+    // The axis ceiling is the only `+N%` the card can carry; the percentile is
+    // written `top N%` and is a different claim. Match the ceiling's own form
+    // so unrelated future copy cannot fail this.
+    expect(renderTimeTrial()).not.toMatch(/\+\d+(\.\d+)?%/);
+  });
+
+  it('says why there is no strip, in terms that do not assume the word prologue', () => {
+    expect(renderTimeTrial()).toContain(NO_AXIS_REASON);
+  });
+
+  it('keeps every cell the coach came for, not only the ones the strip replaced', () => {
+    // Read as a person reads it: tags out, text left, so a bare `69` in a class
+    // name cannot stand in for the place. All five criteria of issue #60's
+    // untouched-content rule, asserted where they are actually labelled.
+    const text = renderTimeTrial().replace(/<[^>]*>/g, '|');
+
+    expect(text).toContain('|Place||69 / 135|');
+    expect(text).toContain('|Time||53:28.25|');
+    expect(text).toContain('|Points||500|');
+    expect(text).toContain('|Field||top 29%|');
+    expect(text).toContain('|69||of 135|');
   });
 });
 

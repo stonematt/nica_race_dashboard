@@ -17,6 +17,8 @@
  * a rider from one guard to another has to say so.
  */
 
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadClubConfig } from '../../../lib/club-config.ts';
 import { createTestDb, type TestDatabase } from '../../../lib/db/testing.ts';
@@ -24,6 +26,8 @@ import { loadCorpus } from '../../../lib/ingest/corpus.ts';
 import { normalize } from '../../../lib/ingest/normalize.ts';
 import { seedClubConfig } from '../../../lib/seed.ts';
 import { listRaces, loadRaceDetail, type RaceDetail } from './query.ts';
+import { NO_AXIS_REASON } from '../../../components/field-strip.ts';
+import { RiderCardView } from '../../../components/RaceDetail.tsx';
 import type { PlacedRider } from '../../../components/race-detail.ts';
 
 /** 2025 Race 4 North — where a naive percent-back inverts the HS1 Boys field. */
@@ -203,5 +207,28 @@ describe('the prologue has no percent-back axis at all', () => {
 
   it('draws no lap chart, because the list published no splits', () => {
     expect(tally(cards(prologue).map((rider) => rider.card.laps.kind))).toEqual({ none: 25 });
+  });
+
+  it('renders the no-axis treatment on all twenty-five cards and a strip on none', () => {
+    /*
+     * The other half of the seam. Everything above stops at the model, and the
+     * model was already right: a green suite and a clean typecheck both missed
+     * #60 because nothing here asked what a coach is actually shown. The bug
+     * was a render — 25 cards drew an axis labelled with the floor.
+     *
+     * `createElement` rather than JSX because the local lane is `.ts` only, and
+     * a tally rather than a per-card assertion because a failing `toContain`
+     * prints the received markup, which is a rider card.
+     */
+    const rendered = cards(prologue).map((rider) =>
+      renderToStaticMarkup(createElement(RiderCardView, { card: rider.card, field: rider.field })),
+    );
+
+    expect(
+      tally(rendered.map((markup) => (markup.includes('<svg') ? 'strip' : 'no strip'))),
+    ).toEqual({ 'no strip': 25 });
+    expect(
+      tally(rendered.map((markup) => (markup.includes(NO_AXIS_REASON) ? 'said why' : 'silent'))),
+    ).toEqual({ 'said why': 25 });
   });
 });

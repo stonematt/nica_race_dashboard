@@ -35,6 +35,72 @@ describe('the invariant', () => {
   });
 });
 
+/*
+ * Issue #60. A time trial publishes no percent back for anybody, so the whole
+ * field is unplaceable at once. The model used to hand back the axis floor,
+ * which the renderer drew as a `+10%` scale with nothing under it — on all 25
+ * cards at the corpus prologue.
+ *
+ * The data half of this was already asserted elsewhere and still passed, which
+ * is why these live here: the fact was known, its consequence was never named.
+ */
+describe('a field with nobody on the axis', () => {
+  const timeTrial = [
+    { pct: null, ours: false },
+    { pct: null, ours: true, label: '«RIDER-A»' },
+    { pct: null, ours: false },
+  ];
+
+  it('has no axis at all, rather than one scaled to the floor', () => {
+    const model = buildFieldStrip(timeTrial);
+
+    expect(model.max).toBeNull();
+    expect(model.dots).toHaveLength(0);
+  });
+
+  it('still counts the field, so nobody is quietly dropped', () => {
+    const model = buildFieldStrip(timeTrial);
+
+    expect(model.placed).toBe(0);
+    expect(model.unplaced).toBe(3);
+  });
+
+  it('says why there is no axis instead of reading out a ceiling', () => {
+    const model = buildFieldStrip(timeTrial);
+
+    expect(model.description).toContain('no gap to the winner');
+    // The floor must not reach a reader as though something were measured.
+    expect(model.description).not.toContain('%');
+  });
+
+  it('cannot be given an axis by a caller-supplied ceiling', () => {
+    // Rider detail passes a shared ceiling so two races compare. A ceiling
+    // still cannot conjure a rider to sit under it.
+    const model = buildFieldStrip(timeTrial, [], 60);
+
+    expect(model.max).toBeNull();
+    expect(model.dots).toHaveLength(0);
+  });
+
+  it('keeps an unplaceable rider beside the strip, as ever', () => {
+    const model = buildFieldStrip(timeTrial, [{ text: '«RIDER-A» — DNF', kind: 'dnf' }]);
+
+    expect(model.outside[0]!.text).toBe('«RIDER-A» — DNF');
+    expect(model.description).toContain('not on the axis');
+  });
+
+  it('leaves a field with one placed rider alone, floor and all', () => {
+    // The guard against over-correcting: one placeable rider is still an axis.
+    const model = buildFieldStrip([
+      { pct: 0, ours: false },
+      { pct: null, ours: true },
+    ]);
+
+    expect(model.max).toBe(MIN_AXIS_MAX);
+    expect(model.dots).toHaveLength(1);
+  });
+});
+
 describe('the axis', () => {
   it('never draws tighter than the floor, so a close field is not stretched', () => {
     expect(
