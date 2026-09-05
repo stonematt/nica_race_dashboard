@@ -58,7 +58,7 @@ function northFinal(rows: string[][]): ListPayload {
   };
 }
 
-/** plate, id, place, displaybib, name, club, bestof, low, bonus, r1..r4, final, fmt1..4 */
+/** plate, id, place, displaybib, name, CLUB (our scoring_team), bestof, low, bonus, r1..r4, final, fmt1..4 */
 const northRow = (plate: string, points: string[], low = '500', final = '1525') => [
   plate,
   '7',
@@ -83,6 +83,7 @@ describe('decodeSeasonIndividual', () => {
       'a list',
       FINAL,
       northFinal([northRow('101', ['500', '500', '500', '500'])]),
+      'North',
     );
 
     expect(decoded.ordinals).toEqual([1, 2, 3, 4]);
@@ -109,7 +110,7 @@ describe('decodeSeasonIndividual', () => {
       },
     };
 
-    const decoded = decodeSeasonIndividual('a list', SNAPSHOT, wide);
+    const decoded = decodeSeasonIndividual('a list', SNAPSHOT, wide, 'North');
 
     expect(decoded.ordinals).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     // Only the two races that actually published a cell become rows: an absent
@@ -122,6 +123,7 @@ describe('decodeSeasonIndividual', () => {
       'a list',
       FINAL,
       northFinal([northRow('101', ['0', '490', '490', '490'], '0', '1470')]),
+      'North',
     );
 
     expect(decoded.rows[0]!.racePoints[0]).toMatchObject({ roundOrdinal: 1, points: '0' });
@@ -134,6 +136,7 @@ describe('decodeSeasonIndividual', () => {
       'a list',
       FINAL,
       northFinal([northRow('101', [UPGRADE, '500', '500', '490'], '0', '1515')]),
+      'North',
     );
 
     const first = decoded.rows[0]!.racePoints[0]!;
@@ -146,6 +149,7 @@ describe('decodeSeasonIndividual', () => {
       'a list',
       FINAL,
       northFinal([northRow('101', ['500', '500', '500', '500'])]),
+      'North',
     );
 
     expect(decoded.rows[0]!.racePoints.map((race) => race.isDropped)).toEqual([
@@ -167,7 +171,7 @@ describe('decodeSeasonIndividual', () => {
       ],
     };
 
-    const decoded = decodeSeasonIndividual('a list', FINAL, south);
+    const decoded = decodeSeasonIndividual('a list', FINAL, south, 'South');
 
     expect(decoded.rows[0]!.lowScore).toBeNull();
     expect(decoded.rows[0]!.final).toBe(1486);
@@ -179,6 +183,7 @@ describe('decodeSeasonIndividual', () => {
       'a list',
       FINAL,
       northFinal([northRow('101', ['500', '500', '500', '500'])]),
+      'North',
     ).rows[0]!;
 
     expect(row.bestOf).toBe('3/4');
@@ -216,8 +221,22 @@ describe('decodeSeasonIndividual', () => {
       ],
     };
 
-    expect(() => decodeSeasonIndividual('a list', FINAL, degenerate)).toThrow(DecodeError);
-    expect(() => decodeSeasonIndividual('a list', FINAL, degenerate)).toThrow(/one-race season/);
+    expect(() => decodeSeasonIndividual('a list', FINAL, degenerate, null)).toThrow(DecodeError);
+    expect(() => decodeSeasonIndividual('a list', FINAL, degenerate, null)).toThrow(
+      /one-race season/,
+    );
+  });
+
+  it('refuses a row whose category conference is not the event conference', () => {
+    // The standing is keyed on (season, conference, plate). Taking the
+    // conference from the category alone would let an unsuffixed category
+    // write a null into the key instead of halting.
+    const payload = northFinal([northRow('101', ['500', '500', '500', '500'])]);
+
+    expect(() => decodeSeasonIndividual('a list', FINAL, payload, 'South')).toThrow(DecodeError);
+    expect(() => decodeSeasonIndividual('a list', FINAL, payload, 'South')).toThrow(
+      /cannot mix them/,
+    );
   });
 
   it('refuses a list that publishes no per-race block at all', () => {
@@ -226,7 +245,7 @@ describe('decodeSeasonIndividual', () => {
       (f) => !f.startsWith('DisplayUpgrades'),
     );
 
-    expect(() => decodeSeasonIndividual('a list', FINAL, empty)).toThrow(
+    expect(() => decodeSeasonIndividual('a list', FINAL, empty, 'North')).toThrow(
       /no per-race points block/,
     );
   });

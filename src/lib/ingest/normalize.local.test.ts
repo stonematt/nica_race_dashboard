@@ -496,8 +496,16 @@ describe('the season standings', () => {
 });
 
 describe('reconciliation with the per-race lists (issue #10)', () => {
-  it('agrees on every comparable per-race point value, with zero disagreements', async () => {
+  it('agrees on all 1,505 comparable per-race point values, with zero disagreements', async () => {
     // The season list is the authority where they disagree. They do not.
+    //
+    // 1,505, not #10's headline 1,527: rounds 2, 3 and 4 only. Round 1's
+    // points are not comparable from this database at all — the 2025 prologue's
+    // `individual_result` rows come from the time-trial list, whose points
+    // column is empty in all 535 rows, and the only list that publishes Race 1
+    // points is `357242`'s `Individual Results - Overall`, which is the
+    // prologue's own result list rather than a season standing and has no table
+    // to land in. Recorded as a gap, not papered over.
     const compared = await db.execute(
       sql.raw(`select count(*)::int as n,
                       count(*) filter (where p.points <> ir.points::text)::int as disagree
@@ -512,10 +520,41 @@ describe('reconciliation with the per-race lists (issue #10)', () => {
 
     const { n, disagree } = compared.rows[0] as { n: number; disagree: number };
     expect(disagree).toBe(0);
-    expect(n).toBeGreaterThan(1500);
+    expect(n).toBe(1505);
   });
 
-  it('agrees on all 48 team season rows', async () => {
+  it('compares no round-1 points, because none are queryable', async () => {
+    const rounds = await db.execute(
+      sql.raw(`select p.round_ordinal, count(*)::int as n
+               from season_individual_race_points p
+               join season_individual_standing s on s.id = p.standing_id
+               join round rd on rd.season_id = s.season_id and rd.ordinal = p.round_ordinal
+               join event e on e.round_id = rd.id
+                 and (e.conference = s.conference or e.conference is null)
+               join individual_result ir on ir.event_id = e.id and ir.plate = s.plate
+               where p.points ~ '^[0-9]+$' and ir.points is not null
+               group by 1 order by 1`),
+    );
+
+    expect(
+      (rounds.rows as { round_ordinal: number; n: number }[]).map((r) => r.round_ordinal),
+    ).toEqual([2, 3, 4]);
+  });
+
+  it('excludes the four Upgrade cells deliberately, not by accident', async () => {
+    // A rider who changed category mid-season shows `Upgrade` where a number
+    // would go, and the per-race list still publishes the points they scored
+    // under the old category. The season list wins; those points do not carry.
+    const upgrades = await db
+      .select()
+      .from(schema.seasonIndividualRacePoints)
+      .where(eq(schema.seasonIndividualRacePoints.isUpgrade, true));
+
+    expect(upgrades).toHaveLength(4);
+    expect(upgrades.every((row) => row.points === 'Upgrade')).toBe(true);
+  });
+
+  it('agrees on all 48 team season rows, cell by cell', async () => {
     const compared = await db.execute(
       sql.raw(`select count(*)::int as n,
                       count(*) filter (where (st.race_points ->> rd.ordinal::text)::int
@@ -530,8 +569,10 @@ describe('reconciliation with the per-race lists (issue #10)', () => {
 
     const { n, disagree } = compared.rows[0] as { n: number; disagree: number };
     expect(disagree).toBe(0);
-    expect(n).toBeGreaterThan(100);
-
+    // 48 team season rows over rounds 2, 3 and 4 is 144 cells, less the three
+    // South teams that publish an empty RACE 4 where that race's own list
+    // publishes 0. The empty cell stays absent, so it is not compared.
+    expect(n).toBe(141);
     expect(await db.select().from(schema.seasonTeamStanding)).toHaveLength(48);
   });
 

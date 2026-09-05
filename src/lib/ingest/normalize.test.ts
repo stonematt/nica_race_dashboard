@@ -405,6 +405,70 @@ describe('normalize', () => {
     expect(await db.select().from(schema.season)).toHaveLength(0);
   });
 
+  it('writes nothing for an event when a list that is not the spine fails', async () => {
+    // Whole-event halt is across families: a By-Team failure must suppress the
+    // spine's rows too, or an event lands half-ingested with nothing saying so.
+    await seed([
+      configRecord(
+        '359478',
+        config('359478', [
+          { ID: 'AAA111', Name: 'flat' },
+          { ID: 'BBB222', Name: 'by team' },
+        ]),
+      ),
+      listRecord(
+        '359478',
+        'AAA111',
+        listPayload(FLAT_FIELDS, { '#1_HS1 Boys - North': [row('101', '1')] }),
+      ),
+      listRecord(
+        '359478',
+        'BBB222',
+        listPayload([...BY_TEAM_FIELDS, 'SomethingNew'], {
+          hs: { d1: { team: [[...byTeamRow('101'), 'x']] } },
+        }),
+      ),
+    ]);
+
+    await expect(normalize(db)).rejects.toThrow(/individual_by_team/);
+
+    expect(await db.select().from(schema.individualResult)).toHaveLength(0);
+    expect(await db.select().from(schema.individualResultByTeam)).toHaveLength(0);
+    expect(await db.select().from(schema.event)).toHaveLength(0);
+  });
+
+  it('is fatal when two lists of a non-spine family land in one event', async () => {
+    // The sole-list rule is not the spine's alone: two By-Team lists would
+    // upsert over each other on the same primary key and lose a result.
+    await seed([
+      configRecord(
+        '359478',
+        config('359478', [
+          { ID: 'AAA111', Name: 'flat' },
+          { ID: 'BBB222', Name: 'by team' },
+          { ID: 'CCC333', Name: 'by team again' },
+        ]),
+      ),
+      listRecord(
+        '359478',
+        'AAA111',
+        listPayload(FLAT_FIELDS, { '#1_HS1 Boys - North': [row('101', '1')] }),
+      ),
+      listRecord(
+        '359478',
+        'BBB222',
+        listPayload(BY_TEAM_FIELDS, { hs: { d1: { team: [byTeamRow('101')] } } }),
+      ),
+      listRecord(
+        '359478',
+        'CCC333',
+        listPayload(BY_TEAM_FIELDS, { hs: { d1: { team: [byTeamRow('102')] } } }),
+      ),
+    ]);
+
+    await expect(normalize(db)).rejects.toThrow(/Exactly one must be/);
+  });
+
   it('leaves an already-decoded event alone when a later one fails', async () => {
     await seed([
       configRecord('359477', config('359477', [{ ID: 'AAA111', Name: 'flat' }])),

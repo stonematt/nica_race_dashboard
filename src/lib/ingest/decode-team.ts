@@ -25,6 +25,7 @@ import {
   parseIntOrRefuse,
   readListLayout,
   resolveFamilyFields,
+  type DecodedList,
   type ListPayload,
 } from './rows.ts';
 
@@ -48,13 +49,6 @@ export interface ByTeamRow {
   penalty: string | null;
   timeRaw: string | null;
   scored: boolean;
-}
-
-export interface DecodedRows<T> {
-  variant: LayoutVariant;
-  expressions: readonly string[];
-  publishedCount: number | null;
-  rows: T[];
 }
 
 /**
@@ -84,7 +78,7 @@ export function decodeByTeam(
   where: string,
   variant: LayoutVariant,
   payload: ListPayload,
-): DecodedRows<ByTeamRow> {
+): DecodedList<ByTeamRow> {
   const layout = readListLayout(where, payload);
   checkExpressionsRecognized(where, layout, INDIVIDUAL_BY_TEAM);
 
@@ -157,7 +151,7 @@ export function decodeTeamRace(
   where: string,
   variant: LayoutVariant,
   payload: ListPayload,
-): DecodedRows<TeamRaceRow> {
+): DecodedList<TeamRaceRow> {
   const layout = readListLayout(where, payload);
   checkExpressionsRecognized(where, layout, TEAM_RACE_RESULT);
 
@@ -271,7 +265,7 @@ export function decodeTeamCounter(
   where: string,
   variant: LayoutVariant,
   payload: ListPayload,
-): DecodedRows<TeamCounterRow> {
+): DecodedList<TeamCounterRow> {
   const layout = readListLayout(where, payload);
   checkExpressionsRecognized(where, layout, TEAM_RACE_COUNTER);
 

@@ -38,10 +38,12 @@ import {
   repeatOrdinals,
   SEASON_INDIVIDUAL,
   SEASON_TEAM,
+  type Family,
   type LayoutVariant,
   type RepeatGroup,
 } from './families.ts';
 import {
+  cellOrNull,
   cellReader,
   checkExpressionsRecognized,
   checkRowCount,
@@ -51,6 +53,7 @@ import {
   parseIntOrRefuse,
   readListLayout,
   resolveFamilyFields,
+  type DecodedList,
   type ListPayload,
 } from './rows.ts';
 
@@ -93,24 +96,18 @@ export interface SeasonTeamRow {
   seasonTotal: number | null;
 }
 
-export interface DecodedSeason<T> {
-  variant: LayoutVariant;
-  expressions: readonly string[];
-  publishedCount: number | null;
-  /** The ordinals of the repeat block this layout published. */
-  ordinals: number[];
-  rows: T[];
-}
-
-function repeat(family: { repeats?: readonly RepeatGroup[] }, name: string): RepeatGroup {
+/** The declared repeat block of a family, or a failure that names the list. */
+function repeat(where: string, family: Family, name: string): RepeatGroup {
   const group = family.repeats?.find((candidate) => candidate.name === name);
-  if (!group) throw new DecodeError(`no repeat group named ${name} is declared`);
+  if (!group) {
+    throw new DecodeError(`${where}: ${family.name} declares no repeat group named ${name}.`);
+  }
   return group;
 }
 
+/** A repeat-group cell, addressed by expression rather than by canonical field. */
 function cellAt(layout: ColumnLayout, row: readonly string[], expression: string): string | null {
-  const value = layout.cell(row, layout.indexOf(expression));
-  return value === undefined || value === '' ? null : value;
+  return cellOrNull(layout.cell(row, layout.indexOf(expression)));
 }
 
 /**
@@ -126,15 +123,16 @@ export function decodeSeasonIndividual(
   where: string,
   variant: LayoutVariant,
   payload: ListPayload,
-): DecodedSeason<SeasonIndividualRow> {
+  conference: Conference | null,
+): DecodedList<SeasonIndividualRow> {
   const layout = readListLayout(where, payload);
   checkExpressionsRecognized(where, layout, SEASON_INDIVIDUAL);
 
   const columns = resolveFamilyFields(where, layout, SEASON_INDIVIDUAL);
   const at = cellReader(layout, columns);
 
-  const points = repeat(SEASON_INDIVIDUAL, 'racePoints');
-  const marker = repeat(SEASON_INDIVIDUAL, 'dropMarker');
+  const points = repeat(where, SEASON_INDIVIDUAL, 'racePoints');
+  const marker = repeat(where, SEASON_INDIVIDUAL, 'dropMarker');
   const ordinals = repeatOrdinals(layout, points);
 
   if (ordinals.length === 0) {
@@ -157,6 +155,17 @@ export function decodeSeasonIndividual(
     if (plate === null || displayName === null) {
       throw new DecodeError(`${where}: row ${number} in "${groupKey}" has no plate or name.`);
     }
+    // The standing is keyed on `(season, conference, plate)`, so the conference
+    // has to be one value and it has to be the event's. Taking it from the
+    // category alone would let an unsuffixed category — a documented defect
+    // class — write a null into the key instead of halting.
+    if (category.conference !== conference) {
+      throw new DecodeError(
+        `${where}: row ${number} is in "${groupKey}", whose conference is ` +
+          `${category.conference ?? 'unstated'}, but the event is ${conference ?? 'combined'}. ` +
+          'A season standing is keyed on conference and cannot mix them.',
+      );
+    }
 
     const racePoints: SeasonRacePoints[] = [];
     for (const ordinal of ordinals) {
@@ -176,7 +185,7 @@ export function decodeSeasonIndividual(
     }
 
     rows.push({
-      conference: category.conference,
+      conference,
       plate,
       displayName,
       scoringTeam: at(row, 'scoringTeam'),
@@ -246,14 +255,14 @@ export function decodeSeasonTeam(
   variant: LayoutVariant,
   payload: ListPayload,
   conference: Conference | null,
-): DecodedSeason<SeasonTeamRow> {
+): DecodedList<SeasonTeamRow> {
   const layout = readListLayout(where, payload);
   checkExpressionsRecognized(where, layout, SEASON_TEAM);
 
   const columns = resolveFamilyFields(where, layout, SEASON_TEAM);
   const at = cellReader(layout, columns);
 
-  const points = repeat(SEASON_TEAM, 'racePoints');
+  const points = repeat(where, SEASON_TEAM, 'racePoints');
   const ordinals = repeatOrdinals(layout, points);
   const rows: SeasonTeamRow[] = [];
 

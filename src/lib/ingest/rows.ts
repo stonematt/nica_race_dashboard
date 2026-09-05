@@ -10,7 +10,7 @@
 
 import { readColumnLayout, type ColumnLayout, type DisplayField } from './columns.ts';
 import { IngestError } from './errors.ts';
-import { recognizedExpressions, type Family } from './families.ts';
+import { recognizedExpressions, type Family, type LayoutVariant } from './families.ts';
 
 /** A payload that cannot be decoded faithfully. Refuse to write. */
 export class DecodeError extends IngestError {}
@@ -20,6 +20,24 @@ export interface ListPayload {
   list?: { ListName?: unknown; ListFooterText?: unknown; Fields?: unknown };
   DataFields?: unknown;
   data?: unknown;
+}
+
+/**
+ * What decoding one list produces, whatever family it belongs to.
+ *
+ * One envelope rather than one per family: the three decoders differ in what a
+ * row *is* and agree on everything around it, and the snapshot reads the same
+ * three fields from all of them.
+ */
+export interface DecodedList<Row> {
+  variant: LayoutVariant;
+  /** `DataFields` verbatim — the snapshot's record of this event's layout. */
+  expressions: readonly string[];
+  /** The `ListFooterText` count, where the source published one. */
+  publishedCount: number | null;
+  /** Ordinals of the repeat block, for the families that have one. */
+  ordinals?: number[];
+  rows: Row[];
 }
 
 /** One row, with the group labels above it. */

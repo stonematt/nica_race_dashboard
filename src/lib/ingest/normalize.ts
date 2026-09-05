@@ -23,17 +23,16 @@
  */
 
 import { eq } from 'drizzle-orm';
+import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from '../db/schema.ts';
-import type { Conference } from './category.ts';
 import { readCatalog, type EventCatalog } from './catalog.ts';
 import { readEventIdentity, upsertEvent, type EventIdentity } from './calendar.ts';
-import { decodeIndividualFlat, type DecodedList } from './decode.ts';
+import { decodeIndividualFlat, type IndividualRow } from './decode.ts';
 import {
   decodeSeasonIndividual,
   decodeSeasonTeam,
   isDegenerateTeamSeason,
-  type DecodedSeason,
   type SeasonIndividualRow,
   type SeasonTeamRow,
 } from './decode-season.ts';
@@ -42,7 +41,6 @@ import {
   decodeTeamCounter,
   decodeTeamRace,
   type ByTeamRow,
-  type DecodedRows,
   type TeamCounterRow,
   type TeamRaceRow,
 } from './decode-team.ts';
@@ -54,6 +52,7 @@ import {
   countRows,
   dataDepth,
   readListLayout,
+  type DecodedList,
   type ListPayload,
 } from './rows.ts';
 
@@ -94,15 +93,21 @@ export interface NormalizeResult {
   placed: PlacedList[];
 }
 
-/** Everything one event contributes, decoded and not yet written. */
+/**
+ * Everything one event contributes, decoded and not yet written.
+ *
+ * At most one list per family per event — `soleListFor` makes that true — so
+ * each slot holds one decode or none. The spine is the exception: an event
+ * without it has no results at all, so it is not optional.
+ */
 interface DecodedEvent {
   identity: EventIdentity;
-  individual: DecodedList;
-  byTeam: DecodedRows<ByTeamRow>[];
-  teamRace: DecodedRows<TeamRaceRow>[];
-  teamCounter: DecodedRows<TeamCounterRow>[];
-  seasonIndividual: DecodedSeason<SeasonIndividualRow>[];
-  seasonTeam: DecodedSeason<SeasonTeamRow>[];
+  individual: DecodedList<IndividualRow>;
+  byTeam?: DecodedList<ByTeamRow>;
+  teamRace?: DecodedList<TeamRaceRow>;
+  teamCounter?: DecodedList<TeamCounterRow>;
+  seasonIndividual?: DecodedList<SeasonIndividualRow>;
+  seasonTeam?: DecodedList<SeasonTeamRow>;
 }
 
 function listPayloadOf(where: string, payload: unknown): ListPayload {
@@ -205,7 +210,14 @@ function seasonRecordRefusal(list: PlacedList, identity: EventIdentity): string 
   return null;
 }
 
-/** Decode every list of one event. Nothing is written from here. */
+/**
+ * Decode every list of one event. Nothing is written from here.
+ *
+ * Every family is reduced to at most one list per event before anything is
+ * decoded, and the dispatch below is exhaustive: a target with no arm is a
+ * refusal, not a fallthrough. A seventh family arriving without a decoder must
+ * halt the event rather than be decoded as whatever the last arm happened to be.
+ */
 function decodeEvent(
   eventId: string,
   identity: EventIdentity,
@@ -216,91 +228,140 @@ function decodeEvent(
     const row = rows.find((candidate) => candidate.listId === list.listId)!;
     return listPayloadOf(whereOf(eventId, row), row.payload);
   };
-  const mark = (list: PlacedList) => {
-    list.decoded = true;
-    return whereOf(eventId, list);
-  };
 
-  const spine = placed.filter((list) => list.family === INDIVIDUAL_FLAT);
-  if (spine.length === 0) {
+  // One list per family, per event. The spine is not the only family this has
+  // to hold for: two By-Team lists at one event would upsert over each other on
+  // the same primary key and lose a published result silently.
+  const byFamily = new Map<Family, PlacedList[]>();
+  for (const list of placed) {
+    byFamily.set(list.family, [...(byFamily.get(list.family) ?? []), list]);
+  }
+
+  const spine = byFamily.get(INDIVIDUAL_FLAT);
+  if (spine === undefined) {
     throw new NormalizeError(
       `event ${eventId}: no flat individual list. It is the spine — every rider on every ` +
         'team — and an event without one has no results to decode.',
     );
   }
-  const chosen = soleListFor(eventId, INDIVIDUAL_FLAT, spine);
-  for (const list of spine) {
-    if (list !== chosen) list.skippedBecause = 'another list of this family is the published one';
+
+  const chosenOf = new Map<Family, PlacedList>();
+  for (const [family, candidates] of byFamily) {
+    const chosen = soleListFor(eventId, family, candidates);
+    chosenOf.set(family, chosen);
+    for (const list of candidates) {
+      if (list !== chosen) list.skippedBecause = 'another list of this family is the published one';
+    }
   }
 
   const decoded: DecodedEvent = {
     identity,
-    individual: decodeIndividualFlat(mark(chosen), chosen.variant, payloadFor(chosen)),
-    byTeam: [],
-    teamRace: [],
-    teamCounter: [],
-    seasonIndividual: [],
-    seasonTeam: [],
+    individual: decodeSpine(eventId, chosenOf.get(INDIVIDUAL_FLAT)!, payloadFor),
   };
 
-  for (const list of placed) {
-    if (list.family === INDIVIDUAL_FLAT) continue;
+  for (const [family, list] of chosenOf) {
+    if (family === INDIVIDUAL_FLAT) continue;
 
-    if (list.family.target === 'individual_result_by_team') {
-      decoded.byTeam.push(decodeByTeam(mark(list), list.variant, payloadFor(list)));
-      continue;
+    switch (family.target) {
+      case 'individual_result_by_team':
+        decoded.byTeam = decodeAs(list, decodeByTeam, eventId, payloadFor);
+        break;
+      case 'team_race_result':
+        decoded.teamRace = decodeAs(list, decodeTeamRace, eventId, payloadFor);
+        break;
+      case 'team_race_counter':
+        decoded.teamCounter = decodeAs(list, decodeTeamCounter, eventId, payloadFor);
+        break;
+      case 'season_individual_standing': {
+        const refusal = seasonRecordRefusal(list, identity);
+        if (refusal !== null) {
+          list.skippedBecause = refusal;
+          break;
+        }
+        const where = whereOf(eventId, list);
+        decoded.seasonIndividual = decodeSeasonIndividual(
+          where,
+          list.variant,
+          payloadFor(list),
+          identity.conference,
+        );
+        list.decoded = true;
+        break;
+      }
+      case 'season_team_standing': {
+        const refusal = seasonRecordRefusal(list, identity);
+        if (refusal !== null) {
+          list.skippedBecause = refusal;
+          break;
+        }
+        const where = whereOf(eventId, list);
+        const season = decodeSeasonTeam(where, list.variant, payloadFor(list), identity.conference);
+        // Belt and braces on the degenerate copy. It should already have been
+        // refused for carrying no conference, so reaching here means the shape
+        // rules drifted — refuse rather than overwrite the record with zeros.
+        if (isDegenerateTeamSeason(season.rows)) {
+          throw new NormalizeError(
+            `${where}: every row totals 0 for the season. That is the State Champs copy, ` +
+              'which supersedes nothing and must never be written as the season record.',
+          );
+        }
+        decoded.seasonTeam = season;
+        list.decoded = true;
+        break;
+      }
+      case 'individual_result':
+        throw new NormalizeError(
+          `${whereOf(eventId, list)}: a second family targets individual_result. ` +
+            'The spine is one list per event.',
+        );
+      default:
+        throw new NormalizeError(
+          `${whereOf(eventId, list)}: family ${family.name} targets ${family.target}, ` +
+            'which has no decoder. An unhandled target must halt the event, never fall through.',
+        );
     }
-    if (list.family.target === 'team_race_result') {
-      decoded.teamRace.push(decodeTeamRace(mark(list), list.variant, payloadFor(list)));
-      continue;
-    }
-    if (list.family.target === 'team_race_counter') {
-      decoded.teamCounter.push(decodeTeamCounter(mark(list), list.variant, payloadFor(list)));
-      continue;
-    }
-
-    const refusal = seasonRecordRefusal(list, identity);
-    if (refusal !== null) {
-      list.skippedBecause = refusal;
-      continue;
-    }
-
-    if (list.family.target === 'season_individual_standing') {
-      decoded.seasonIndividual.push(
-        decodeSeasonIndividual(mark(list), list.variant, payloadFor(list)),
-      );
-      continue;
-    }
-
-    const where = whereOf(eventId, list);
-    const season = decodeSeasonTeam(
-      where,
-      list.variant,
-      payloadFor(list),
-      identity.conference as Conference | null,
-    );
-    // Belt and braces on the degenerate copy. It should already have been
-    // refused for carrying no conference, so reaching here means the shape
-    // rules drifted — refuse rather than overwrite the real record with zeros.
-    if (isDegenerateTeamSeason(season.rows)) {
-      throw new NormalizeError(
-        `${where}: every row totals 0 for the season. That is the State Champs copy, which ` +
-          'supersedes nothing and must never be written as the season record.',
-      );
-    }
-    mark(list);
-    decoded.seasonTeam.push(season);
   }
 
   return decoded;
 }
 
-/** Write one decoded event, in one transaction. */
+/** The spine, decoded and marked. Separate because it is not optional. */
+function decodeSpine(
+  eventId: string,
+  list: PlacedList,
+  payloadFor: (list: PlacedList) => ListPayload,
+): DecodedList<IndividualRow> {
+  const decoded = decodeIndividualFlat(whereOf(eventId, list), list.variant, payloadFor(list));
+  list.decoded = true;
+  return decoded;
+}
+
+/**
+ * Run one decoder and mark the list decoded.
+ *
+ * The mark is a statement about the list and is made here rather than inside an
+ * argument, so that reading the call does not hide a state change.
+ */
+function decodeAs<Row>(
+  list: PlacedList,
+  decoder: (where: string, variant: LayoutVariant, payload: ListPayload) => DecodedList<Row>,
+  eventId: string,
+  payloadFor: (list: PlacedList) => ListPayload,
+): DecodedList<Row> {
+  const decoded = decoder(whereOf(eventId, list), list.variant, payloadFor(list));
+  list.decoded = true;
+  return decoded;
+}
+
+/**
+ * Write one decoded event, in one transaction.
+ *
+ * Every table takes the same shape of write — upsert on the natural key, so a
+ * second normalize over unchanged payloads changes nothing — so it is spelled
+ * once and applied six times rather than retyped per table.
+ */
 async function writeEvent(db: Db, decoded: DecodedEvent): Promise<Record<string, number>> {
   const written: Record<string, number> = {};
-  const count = (table: string, n: number) => {
-    written[table] = (written[table] ?? 0) + n;
-  };
 
   await db.transaction(async (tx) => {
     const eventPk = await upsertEvent(tx, decoded.identity);
@@ -309,68 +370,69 @@ async function writeEvent(db: Db, decoded: DecodedEvent): Promise<Record<string,
       .from(schema.season)
       .where(eq(schema.season.year, decoded.identity.seasonYear));
 
-    for (const row of decoded.individual.rows) {
-      const values = { eventId: eventPk, ...row };
-      await tx
-        .insert(schema.individualResult)
-        .values(values)
-        .onConflictDoUpdate({
-          target: [schema.individualResult.eventId, schema.individualResult.plate],
-          set: values,
-        });
-    }
-    count('individual_result', decoded.individual.rows.length);
-
-    for (const list of decoded.byTeam) {
-      for (const row of list.rows) {
-        const values = { eventId: eventPk, ...row };
-        await tx
-          .insert(schema.individualResultByTeam)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [schema.individualResultByTeam.eventId, schema.individualResultByTeam.plate],
-            set: values,
-          });
+    /** Upsert every row of one list, and record how many. */
+    const upsertAll = async <Row extends object>(
+      name: string,
+      table: PgTable,
+      target: PgColumn[],
+      rows: readonly Row[],
+      extra: object = {},
+    ) => {
+      for (const row of rows) {
+        const values = { ...extra, ...row };
+        await tx.insert(table).values(values).onConflictDoUpdate({ target, set: values });
       }
-      count('individual_result_by_team', list.rows.length);
+      written[name] = (written[name] ?? 0) + rows.length;
+    };
+
+    const forEvent = { eventId: eventPk };
+    const forSeason = {
+      seasonId: season!.id,
+      sourceEventId: decoded.identity.sourceEventId,
+    };
+
+    await upsertAll(
+      'individual_result',
+      schema.individualResult,
+      [schema.individualResult.eventId, schema.individualResult.plate],
+      decoded.individual.rows,
+      forEvent,
+    );
+
+    if (decoded.byTeam) {
+      await upsertAll(
+        'individual_result_by_team',
+        schema.individualResultByTeam,
+        [schema.individualResultByTeam.eventId, schema.individualResultByTeam.plate],
+        decoded.byTeam.rows,
+        forEvent,
+      );
     }
 
-    for (const list of decoded.teamRace) {
-      for (const row of list.rows) {
-        const values = { eventId: eventPk, ...row };
-        await tx
-          .insert(schema.teamRaceResult)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [schema.teamRaceResult.eventId, schema.teamRaceResult.scoringTeam],
-            set: values,
-          });
-      }
-      count('team_race_result', list.rows.length);
+    if (decoded.teamRace) {
+      await upsertAll(
+        'team_race_result',
+        schema.teamRaceResult,
+        [schema.teamRaceResult.eventId, schema.teamRaceResult.scoringTeam],
+        decoded.teamRace.rows,
+        forEvent,
+      );
     }
 
-    for (const list of decoded.teamCounter) {
-      for (const row of list.rows) {
-        const values = { eventId: eventPk, ...row };
-        await tx
-          .insert(schema.teamRaceCounter)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [schema.teamRaceCounter.eventId, schema.teamRaceCounter.plate],
-            set: values,
-          });
-      }
-      count('team_race_counter', list.rows.length);
+    if (decoded.teamCounter) {
+      await upsertAll(
+        'team_race_counter',
+        schema.teamRaceCounter,
+        [schema.teamRaceCounter.eventId, schema.teamRaceCounter.plate],
+        decoded.teamCounter.rows,
+        forEvent,
+      );
     }
 
-    for (const list of decoded.seasonIndividual) {
-      for (const row of list.rows) {
-        const { racePoints, ...standing } = row;
-        const values = {
-          seasonId: season!.id,
-          sourceEventId: decoded.identity.sourceEventId,
-          ...standing,
-        };
+    if (decoded.seasonIndividual) {
+      let points = 0;
+      for (const { racePoints, ...standing } of decoded.seasonIndividual.rows) {
+        const values = { ...forSeason, ...standing };
         const [stored] = await tx
           .insert(schema.seasonIndividualStanding)
           .values(values)
@@ -384,44 +446,37 @@ async function writeEvent(db: Db, decoded: DecodedEvent): Promise<Record<string,
           })
           .returning({ id: schema.seasonIndividualStanding.id });
 
-        for (const race of racePoints) {
-          const points = { standingId: stored!.id, ...race };
+        // Replaced rather than upserted. The block narrows across the season —
+        // RACE1..RACE10 in a snapshot, RACE1..RACE4 at the end — so upserting
+        // alone would leave rounds behind that the corrected payload no longer
+        // publishes. This is the normalized layer, not the raw archive; only
+        // `raw_fetch` is append-only.
+        await tx
+          .delete(schema.seasonIndividualRacePoints)
+          .where(eq(schema.seasonIndividualRacePoints.standingId, stored!.id));
+        if (racePoints.length > 0) {
           await tx
             .insert(schema.seasonIndividualRacePoints)
-            .values(points)
-            .onConflictDoUpdate({
-              target: [
-                schema.seasonIndividualRacePoints.standingId,
-                schema.seasonIndividualRacePoints.roundOrdinal,
-              ],
-              set: points,
-            });
+            .values(racePoints.map((race) => ({ standingId: stored!.id, ...race })));
         }
-        count('season_individual_race_points', racePoints.length);
+        points += racePoints.length;
       }
-      count('season_individual_standing', list.rows.length);
+      written.season_individual_standing = decoded.seasonIndividual.rows.length;
+      written.season_individual_race_points = points;
     }
 
-    for (const list of decoded.seasonTeam) {
-      for (const row of list.rows) {
-        const values = {
-          seasonId: season!.id,
-          sourceEventId: decoded.identity.sourceEventId,
-          ...row,
-        };
-        await tx
-          .insert(schema.seasonTeamStanding)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [
-              schema.seasonTeamStanding.seasonId,
-              schema.seasonTeamStanding.conference,
-              schema.seasonTeamStanding.scoringTeam,
-            ],
-            set: values,
-          });
-      }
-      count('season_team_standing', list.rows.length);
+    if (decoded.seasonTeam) {
+      await upsertAll(
+        'season_team_standing',
+        schema.seasonTeamStanding,
+        [
+          schema.seasonTeamStanding.seasonId,
+          schema.seasonTeamStanding.conference,
+          schema.seasonTeamStanding.scoringTeam,
+        ],
+        decoded.seasonTeam.rows,
+        forSeason,
+      );
     }
   });
 

@@ -33,6 +33,8 @@ import {
   groupedRows,
   parseIntOrRefuse,
   readListLayout,
+  resolveFamilyFields,
+  type DecodedList,
   type FieldColumns,
   type ListPayload,
 } from './rows.ts';
@@ -65,15 +67,6 @@ export interface IndividualRow {
   ptsLeader: boolean;
 }
 
-export interface DecodedList {
-  variant: LayoutVariant;
-  /** `DataFields` verbatim — the snapshot's record of this event's layout. */
-  expressions: readonly string[];
-  /** The `ListFooterText` count, when the source published one. */
-  publishedCount: number | null;
-  rows: IndividualRow[];
-}
-
 /**
  * Seconds for a published time, or null when it is not a time.
  *
@@ -101,18 +94,7 @@ const LAP_FIELDS = ['lap1', 'lap2', 'lap3', 'lap4'] as const;
  * a name arrives whole, or split in two.
  */
 function resolveIndividualFields(where: string, layout: ColumnLayout): FieldColumns {
-  const columns: FieldColumns = {};
-  for (const [field, aliases] of Object.entries(INDIVIDUAL_FLAT.aliases)) {
-    columns[field] = layout.resolve(field, aliases)?.column ?? null;
-  }
-
-  const missing = INDIVIDUAL_FLAT.required.filter((field) => columns[field] === null);
-  if (missing.length > 0) {
-    throw new DecodeError(
-      `${where}: required field(s) ${missing.join(', ')} resolve to no column. ` +
-        `Columns present: ${layout.dataFields.join(', ')}`,
-    );
-  }
+  const columns = resolveFamilyFields(where, layout, INDIVIDUAL_FLAT);
 
   // The 2025 prologue is the only place the split appears, and it is an alias
   // for the same canonical field.
@@ -138,7 +120,7 @@ export function decodeIndividualFlat(
   where: string,
   variant: LayoutVariant,
   payload: ListPayload,
-): DecodedList {
+): DecodedList<IndividualRow> {
   const layout = readListLayout(where, payload);
   checkExpressionsRecognized(where, layout, INDIVIDUAL_FLAT);
 
