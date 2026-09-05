@@ -1,20 +1,20 @@
-import { defineConfig } from 'vitest/config';
+/**
+ * The default lane — what `pnpm test` runs, and what CI will run.
+ *
+ * It reads no fixture payloads. Tests that need real rows carry `.local.test.ts`
+ * and are excluded here by name; run them with `pnpm test:local`. See
+ * vitest.shared.ts for why the split is by what a test reads.
+ */
+
+import { configDefaults, defineConfig } from 'vitest/config';
+import { LOCAL_ONLY_GLOB, sharedTestConfig } from './vitest.shared.ts';
 
 export default defineConfig({
   test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    // PGlite boots a WASM Postgres per suite; the default 5s is not enough.
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
-    server: {
-      deps: {
-        // next-auth reaches for `next/server`, which resolves through Next's
-        // exports map. Left external, Node resolves it itself and fails. Inline
-        // it so Vite does the resolving and src/middleware.ts stays importable
-        // from a test.
-        inline: [/next-auth/, /@auth\/core/],
-      },
-    },
+    ...sharedTestConfig,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
+    // configDefaults.exclude carries node_modules, dist and friends; dropping it
+    // to write this one entry would quietly pull in every dependency's tests.
+    exclude: [...configDefaults.exclude, LOCAL_ONLY_GLOB],
   },
 });

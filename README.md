@@ -88,6 +88,7 @@ Schema lives in `src/lib/db/schema.ts`; migrations in `src/lib/db/migrations/`. 
 | `pnpm dev`                          | Next dev server, bound to `127.0.0.1`         |
 | `pnpm build` / `pnpm start`         | Production build and serve                    |
 | `pnpm test`                         | Vitest, once                                  |
+| `pnpm test:local`                   | The local-only lane, which reads the corpus   |
 | `pnpm test:watch`                   | Vitest, watching                              |
 | `pnpm typecheck`                    | `tsc --noEmit`                                |
 | `pnpm lint`                         | ESLint                                        |
@@ -107,6 +108,13 @@ Tests sit beside the source they cover, as `*.test.ts`. `src/lib/db/testing.ts` 
 ```bash
 pnpm test
 ```
+
+There are **two lanes, split by what a test reads.** `pnpm test` reads only code and
+synthetic data, so it is safe to run anywhere. A test named `*.local.test.ts` reads the
+real RaceResult fixture corpus — minors' names, schools, grades and finish times — and
+runs only under `pnpm test:local`, never in CI. See
+[`docs/fixtures.md`](docs/fixtures.md) for the corpus, and for the pre-commit hook that
+`pnpm install` arms to stop those payloads ever being committed.
 
 ## Contributing
 

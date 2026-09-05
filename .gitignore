@@ -7,8 +7,10 @@ coverage/
 # PGlite's on-disk database — local derived state, never committed
 .pglite/
 
-# Fetched payloads carry minors' names. The corpus lives outside the tree
-# (see docs/fixtures.md); this is belt-and-braces if anyone points it here.
+# The fixture corpus lives here, in the tree, and is never committed: the
+# payloads carry minors' full names, schools, grades and finish times, and this
+# repo is public. This line stops an ordinary `git add`; scripts/git-hooks/
+# pre-commit reads the index and so stops `git add -f` too. See docs/fixtures.md.
 data/
 fixtures/
 

@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@10.33.2",
   "scripts": {
+    "prepare": "node scripts/install-git-hooks.mjs",
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start",
@@ -17,6 +18,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:local": "vitest run --config vitest.local.config.ts",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node bin/migrate.ts",
