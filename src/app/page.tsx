@@ -1,35 +1,39 @@
+import Link from 'next/link';
 import { auth } from '@/auth.ts';
 import { Banner } from '@/components/Banner.tsx';
 import { SignOutButton } from '@/components/SignOutButton.tsx';
 
 /**
- * The authenticated shell. Nothing reads the database yet — the views hang off
- * race detail, which is issue #24, and it in turn waits on the raw archive and
- * the flat-list decode. What this page proves is the frame: the gate holds, the
- * brand renders, and every later slice has somewhere to land.
+ * The authenticated shell. Race detail now reads the database (issue #24) and
+ * the other three views hang off it. What this page proves is the frame: the
+ * gate holds, the brand renders, and every later slice has somewhere to land.
  */
 
-/** The four views the map names. Each links out to the ticket that builds it. */
+/** The four views the map names. Built ones link to themselves; the rest to their ticket. */
 const VIEWS = [
   {
     name: 'Race detail',
     note: 'Squad cards, field strip, percent back. The spine — everything else hangs off it.',
-    issue: 24,
+    issue: null,
+    href: '/races',
   },
   {
     name: 'Rider detail',
     note: 'One rider across a season: a field strip per race they started.',
     issue: 17,
+    href: null,
   },
   {
     name: 'Club vs league',
     note: 'One strip per category, every club member marked.',
     issue: 18,
+    href: null,
   },
   {
     name: 'Roster and squads',
     note: 'The only write surface in the app. Deferred until the read path proves out.',
     issue: null,
+    href: null,
   },
 ] as const;
 
@@ -46,10 +50,13 @@ export default async function Home() {
       </Banner>
 
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="font-display text-4xl tracking-wide uppercase">Nothing ingested yet</h1>
+        <h1 className="font-display text-4xl tracking-wide uppercase">Descenders</h1>
         <p className="text-muted mt-3 max-w-2xl">
-          The schema is migrated and the gate is up. Results arrive once the raw archive is
-          populated and the flat individual list is decoded.
+          The schema is migrated, the gate is up, and race detail reads the database.{' '}
+          <Link href="/races" className="text-fg hover:text-accent font-semibold underline">
+            Open a race
+          </Link>
+          .
         </p>
 
         <ul className="mt-10 grid gap-4 sm:grid-cols-2">
@@ -63,8 +70,15 @@ export default async function Home() {
               </h2>
               <p className="text-muted mt-2 text-sm">{view.note}</p>
               <p className="mt-3 text-xs">
-                {view.issue ? (
-                  <span className="bg-accent on-accent rounded px-2 py-0.5 font-semibold">
+                {view.href ? (
+                  <Link
+                    href={view.href}
+                    className="bg-accent on-accent rounded px-2 py-0.5 font-semibold"
+                  >
+                    open
+                  </Link>
+                ) : view.issue ? (
+                  <span className="border-border text-muted rounded border px-2 py-0.5 font-semibold">
                     issue #{view.issue}
                   </span>
                 ) : (
