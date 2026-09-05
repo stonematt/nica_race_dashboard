@@ -52,6 +52,19 @@ Copy `fixtures/` from another checkout of yours, or from
 `~/.local/share/nica_race_dashboard/fixtures/`. Without it, `pnpm test` still passes in
 full; only `pnpm test:local` needs it.
 
+In a git worktree, copying means a second 1.7M copy of the corpus, which is what makes
+symlinking `fixtures` in tempting instead. That is fine, with one extra step: a symlink
+named `fixtures` is a _file_ to git, not a directory, so `.gitignore`'s `fixtures/` entry
+does not match it and `git status` reports it untracked. Immediately after creating the
+symlink, add the per-worktree, uncommitted exclusion:
+
+```
+echo fixtures >> .git/info/exclude
+```
+
+That makes staging it impossible without `git add -f`, the same as the copied form. See
+[#52](https://github.com/stonematt/nica_race_dashboard/issues/52).
+
 ## Why it is ignored rather than committed
 
 **This repository is public and the payloads contain minors' full names, schools, grades

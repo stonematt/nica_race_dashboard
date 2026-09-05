@@ -48,6 +48,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { isRecord } from './is-record.ts';
 
 /** Repo root, resolved from this file so it does not depend on the cwd. */
 const repoRoot = path.join(import.meta.dirname, '..', '..');
@@ -143,10 +144,6 @@ export function pseudonymFor(riderKey: string): string {
 const RIDER_KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 const KNOWN_KEYS = new Set(['club', 'season', 'scoringTeams', 'riders', 'squads']);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /** A `_`-prefixed key is documentation the maintainer left in the file. */
 function isCommentKey(key: string): boolean {

@@ -14,8 +14,14 @@
  *
  * Three rules, narrowest first:
  *
- *   1. Nothing under `fixtures/` or `data/` is ever tracked. Blunt, certain,
- *      and cheap.
+ *   1. Nothing under `fixtures/` or `data/` is ever tracked, and neither path
+ *      is ever tracked by itself either — a symlink named exactly `fixtures`
+ *      or `data` is a file to git, not a directory, so a prefix check alone
+ *      misses it (#52). This is a path check, so it does not follow an
+ *      arbitrarily-named symlink into a corpus directory; the pre-commit hook
+ *      has the same blind spot, on purpose — a payload reached that way
+ *      through a *tracked* file still gets read and scanned by rules 2 and 3
+ *      below.
  *   2. A tracked RaceResult-shaped payload must carry NO rows. This is the rule
  *      that guards the committed shape corpus (#31): a stripper regression that
  *      starts emitting real rows fails the build rather than publishing them.
@@ -34,7 +40,12 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-/** Directories whose contents are never committed. */
+/**
+ * Directories whose contents are never committed. Rule 1 also rejects the
+ * bare path with the trailing slash stripped — `fixtures`, `data` — so a
+ * tracked symlink of that exact name is caught the same way a tracked
+ * directory of that name is. See rule 1's doc above.
+ */
 export const FORBIDDEN_PREFIXES = ['fixtures/', 'data/'];
 
 /** Only these get read for name shapes; everything else is prose or code. */
@@ -96,15 +107,30 @@ function isRaceResultPayload(value: unknown): value is { DataFields: unknown[]; 
   );
 }
 
-/** Every row in a payload's `data`, whatever nesting the list happens to use. */
+/**
+ * Every row in a payload's `data`, whatever nesting the list happens to use.
+ *
+ * A group is either a list of rows (the base case: an array, returned as-is)
+ * or another object of groups one level deeper — a two-level-nested
+ * RaceResult payload groups by category and then by school, say. Recursing
+ * until an array turns up is what makes an inner group object count as MORE
+ * grouping rather than as a row in its own right; the earlier one-level
+ * `flatMap` treated a nested group object as a single opaque "row", which is
+ * what let a correctly stripped nested payload still report rows carried.
+ *
+ * A group that is neither an array nor an object — a bare string, number, or
+ * `null` sitting where a list of rows was expected — still counts as one
+ * opaque row rather than zero. That shape should never occur in a real
+ * payload, but the guard fails toward counting a row it cannot make sense of
+ * rather than silently dropping it: this is the never-narrow rule applied to
+ * the one case recursion could otherwise have quietly zeroed out.
+ */
 function rowsOf(data: unknown): unknown[] {
   if (Array.isArray(data)) return data;
   if (typeof data === 'object' && data !== null) {
-    return Object.values(data as Record<string, unknown>).flatMap((group) =>
-      Array.isArray(group) ? group : [group],
-    );
+    return Object.values(data as Record<string, unknown>).flatMap(rowsOf);
   }
-  return [];
+  return data === undefined ? [] : [data];
 }
 
 function looksLikeAName(value: string): boolean {
@@ -208,12 +234,18 @@ export function scan(files: ScannedFile[]): Finding[] {
   const findings: Finding[] = [];
 
   for (const { path, content } of files) {
-    const forbidden = FORBIDDEN_PREFIXES.find((prefix) => path.startsWith(prefix));
+    const forbidden = FORBIDDEN_PREFIXES.find(
+      (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
+    );
     if (forbidden !== undefined) {
+      const bareName = forbidden.slice(0, -1);
       findings.push({
         path,
         rule: 'tracked-corpus-path',
-        detail: `tracked under ${forbidden}, which is never committed`,
+        detail:
+          path === bareName
+            ? `tracked as \`${path}\` itself — a symlink or file with this exact name is never committed`
+            : `tracked under ${forbidden}, which is never committed`,
       });
       continue;
     }

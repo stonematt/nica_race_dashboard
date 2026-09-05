@@ -40,6 +40,36 @@ describe('the tracked-corpus-path rule', () => {
       1,
     );
   });
+
+  it('refuses a tracked path named exactly `fixtures`, with no trailing slash', () => {
+    // #52: the prefix check on `fixtures/` never matches the bare path
+    // `fixtures` at all, which is exactly what a symlink is tracked as.
+    expect(scan([{ path: 'fixtures', content: '' }]).map((f) => f.rule)).toEqual([
+      'tracked-corpus-path',
+    ]);
+  });
+
+  it('refuses a tracked path named exactly `data` too', () => {
+    expect(scan([{ path: 'data', content: '' }]).map((f) => f.rule)).toEqual([
+      'tracked-corpus-path',
+    ]);
+  });
+
+  it('refuses a tracked symlink named `fixtures`, whatever it points at', () => {
+    // A symlink is a file to git — `git ls-files` reports it at the bare path
+    // `fixtures`, no trailing slash, same as the case above. What the symlink
+    // resolves to is irrelevant to this rule; the path itself is the finding.
+    expect(
+      scan([{ path: 'fixtures', content: '~/.local/share/nica_race_dashboard/fixtures' }]).map(
+        (f) => f.rule,
+      ),
+    ).toEqual(['tracked-corpus-path']);
+  });
+
+  it('leaves an unrelated file with "fixtures" in its name alone', () => {
+    // docs/fixtures.md is prose about the corpus, not a path under it.
+    expect(scan([{ path: 'docs/fixtures.md', content: '# Fixture corpus\n' }])).toEqual([]);
+  });
 });
 
 describe('the payload-rows rule', () => {
@@ -70,6 +100,51 @@ describe('the payload-rows rule', () => {
       data: { '#1_Varsity Boys - North': [], '#2_Varsity Boys - South': [] },
     });
     expect(scan([{ path: 'shape/2025/overall.json', content }])).toEqual([]);
+  });
+
+  it('passes a two-level-nested payload that kept the shape and dropped the rows', () => {
+    // A group grouped by group: category, then school, each stripped to [].
+    // rowsOf() has to recurse past the inner group objects rather than
+    // counting one of them as a single opaque "row".
+    const content = JSON.stringify({
+      DataFields: ['BIB', 'ID', 'CategoryRank', 'ucase([DisplayName])', 'CLUB', 'TotalTime'],
+      data: {
+        '#1_Varsity Boys': { '#1_North High': [], '#2_South High': [] },
+        '#2_Varsity Girls': { '#1_North High': [] },
+      },
+    });
+    expect(scan([{ path: 'shape/2025/overall.json', content }])).toEqual([]);
+  });
+
+  it('still refuses a two-level-nested payload that carries a real row', () => {
+    // The false-negative this closes: a single-level flatMap returned the
+    // inner group object itself as one "row", so a nested payload with rows
+    // still in it could read as carrying only 1 opaque row rather than N real
+    // ones — or, worse, an empty one could read as carrying 1.
+    const content = JSON.stringify({
+      DataFields: ['BIB', 'ID', 'CategoryRank', 'ucase([DisplayName])', 'CLUB', 'TotalTime'],
+      data: {
+        '#1_Varsity Boys': { '#1_North High': [A_ROW], '#2_South High': [] },
+      },
+    });
+    const finding = scan([{ path: 'shape/2025/overall.json', content }]).find(
+      (f) => f.rule === 'payload-rows',
+    );
+    expect(finding?.detail).toContain('1 row');
+  });
+
+  it('still counts a group that is neither an array nor an object as one row', () => {
+    // Should never occur in a real payload, but the never-narrow rule means
+    // recursing into objects must not quietly zero out a shape rowsOf() does
+    // not recognize — it has to fail toward counting a row, not dropping one.
+    const content = JSON.stringify({
+      DataFields: ['BIB', 'ucase([DisplayName])'],
+      data: { '#1_North': 'not a list of rows', '#2_South': null },
+    });
+    const finding = scan([{ path: 'shape/overall.json', content }]).find(
+      (f) => f.rule === 'payload-rows',
+    );
+    expect(finding?.detail).toContain('2 row');
   });
 
   it('never echoes the row it found', () => {

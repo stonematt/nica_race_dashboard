@@ -58,6 +58,7 @@
 
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from '../db/schema.ts';
+import { isRecord } from '../is-record.ts';
 import {
   configUrl,
   listUrl,
@@ -127,10 +128,6 @@ function configPathOf(url: string, eventId: string): string {
  */
 function configPathFor(eventId: string, shape: SourceShape): string {
   return configPathOf(configUrl(eventId, shape), eventId);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

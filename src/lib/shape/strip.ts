@@ -33,6 +33,7 @@ import { join } from 'node:path';
 import { format, resolveConfig } from 'prettier';
 import { readCatalog, type SourceShape } from '../ingest/catalog.ts';
 import { discoverCorpus, readEventRecords } from '../ingest/corpus.ts';
+import { isRecord } from '../is-record.ts';
 import {
   REDACTED_KEY,
   shapeConfigFileName,
@@ -53,10 +54,6 @@ export interface ListIdentity {
   eventId: string;
   listId: string;
   hidden: boolean;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function stringOr(value: unknown, fallback: string): string {
