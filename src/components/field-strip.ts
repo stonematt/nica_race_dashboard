@@ -68,8 +68,18 @@ export type FieldDot = {
 };
 
 export type FieldStripModel = {
-  /** The axis ceiling actually drawn, in percent back. */
-  max: number;
+  /**
+   * The axis ceiling actually drawn, in percent back — or **null when there is
+   * no axis at all**, because not one rider in the field is placeable.
+   *
+   * Null rather than a number the renderer is trusted to ignore. A ceiling
+   * computed over no riders is the floor, and a floor drawn as an axis is a
+   * scale nothing was measured against: at a time trial that rendered a
+   * `+10%` axis with no marks on it, on every card (issue #60). Making the
+   * absence a type the renderer has to answer for is the same move the
+   * invariant makes with a null `pct` — see the module header.
+   */
+  max: number | null;
   dots: FieldDot[];
   outside: OutsideMark[];
   /** Starters with a position on the axis. */
@@ -111,16 +121,27 @@ export function buildFieldStrip(
   outside: readonly OutsideMark[] = [],
   max?: number,
 ): FieldStripModel {
-  const ceiling = axisMax(marks, max);
   const placeable = marks.filter((m) => m.pct !== null);
 
-  const dots: FieldDot[] = [...placeable]
-    .sort((a, b) => Number(a.ours) - Number(b.ours))
-    .map((m) => ({
-      x: axisPosition(m.pct as number, ceiling),
-      ours: m.ours,
-      ...(m.label === undefined ? {} : { label: m.label }),
-    }));
+  /*
+   * No placeable rider, no axis — and this holds even against a caller-supplied
+   * ceiling. Rider detail passes a shared `max` so two races can be compared
+   * side by side, but a ceiling cannot conjure marks to sit under it, and a race
+   * that published no percent back has nothing to compare. Drawing the axis
+   * anyway is the whole of issue #60.
+   */
+  const ceiling = placeable.length === 0 ? null : axisMax(marks, max);
+
+  const dots: FieldDot[] =
+    ceiling === null
+      ? []
+      : [...placeable]
+          .sort((a, b) => Number(a.ours) - Number(b.ours))
+          .map((m) => ({
+            x: axisPosition(m.pct as number, ceiling),
+            ours: m.ours,
+            ...(m.label === undefined ? {} : { label: m.label }),
+          }));
 
   return {
     max: ceiling,
@@ -142,11 +163,27 @@ export function buildFieldStrip(
  */
 function describe(
   marks: readonly FieldMark[],
-  max: number,
+  max: number | null,
   outside: readonly OutsideMark[],
 ): string {
   const placed = marks.filter((m) => m.pct !== null).length;
   const ours = marks.filter((m) => m.ours && m.pct !== null);
+
+  /*
+   * No axis, so there is no position to describe and nobody sitting at one.
+   * Say what is true instead — the reason there is no chart — rather than
+   * reading out a ceiling that measured nothing.
+   */
+  if (max === null) {
+    const parts = [
+      `No axis: this race published no gap to the winner, ` +
+        `so none of the ${marks.length} rider${marks.length === 1 ? '' : 's'} can be placed`,
+    ];
+    for (const mark of outside) {
+      parts.push(`${mark.text}, not on the axis`);
+    }
+    return `${parts.join('; ')}.`;
+  }
 
   const parts = [
     `${placed} rider${placed === 1 ? '' : 's'} on the axis, winner to +${round(max)}%`,

@@ -142,6 +142,58 @@ describe('a field with fewer than ten starters', () => {
   });
 });
 
+/*
+ * Issue #60. The corpus prologue is a time trial, so `v_race_result` publishes
+ * no percent back for anyone in the category — the whole field is unplaceable
+ * at once. The strip drew its frame anyway, labelled with the axis floor, on
+ * every one of the event's 25 cards.
+ *
+ * The data layer already asserted the field was all-null and was right to. This
+ * is the other half of that seam: what a coach is shown once it is.
+ */
+describe('a race that published no gap to the winner', () => {
+  const timeTrial = row({
+    pctBack: null,
+    place: '69',
+    fieldSize: 135,
+    fieldTopPct: 29,
+    timeRaw: '53:28.25',
+    lapSplits: [],
+    lapSeconds: [],
+  });
+
+  function renderTimeTrial(): string {
+    const field = [timeTrial, row({ plate: '820', pctBack: null, place: '72' })];
+    const squad = buildSquadCard(
+      'Descenders',
+      [{ row: timeTrial, name: '«RIDER-N»' }],
+      new Map([[timeTrial.category, field]]),
+    );
+    const rider = squad.riders[0]!;
+    return renderToStaticMarkup(<RiderCardView card={rider.card} field={rider.field} />);
+  }
+
+  it('draws no strip, because there is nothing to plot', () => {
+    const markup = renderTimeTrial();
+    expect(markup).not.toContain('<svg');
+    expect(markup).not.toContain('<circle');
+  });
+
+  it('shows no axis percentage, which was the floor and measured nothing', () => {
+    expect(renderTimeTrial()).not.toMatch(/\+\d/);
+  });
+
+  it('says why there is no strip, in terms that do not assume the word prologue', () => {
+    expect(renderTimeTrial()).toContain('no gap to the winner');
+  });
+
+  it('keeps the place and the percentile the coach came for', () => {
+    const markup = renderTimeTrial();
+    expect(markup).toContain('69');
+    expect(markup).toContain('top 29%');
+  });
+});
+
 describe('the field strip', () => {
   it('draws one dot per placeable rider and none for the rest', () => {
     const markup = renderToStaticMarkup(

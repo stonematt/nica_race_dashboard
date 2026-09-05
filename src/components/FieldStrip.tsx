@@ -49,6 +49,30 @@ const GEOMETRY = {
  */
 const inset = (x: number) => `${(4 + x * 92).toFixed(3)}%`;
 
+/**
+ * What stands in for the strip when the field has no axis.
+ *
+ * A time trial publishes no gap to the winner for anyone, so there is nothing
+ * to plot and no scale to plot it against. The frame used to be drawn anyway,
+ * labelled with the axis floor, which read as riders missing from a chart
+ * rather than a chart that does not apply (issue #60). Saying so is the honest
+ * shape, and it keeps the card's own rhythm — a coach's eye still lands here.
+ *
+ * The percentile and the place are unaffected and still on the card: this
+ * removes a chart that meant nothing, not the information a coach came for.
+ */
+function NoAxis({ description }: { description: string }) {
+  return (
+    <p
+      className="border-border bg-surface text-muted rounded-md border px-3 py-2 text-[11px]"
+      // The strip's own sentence, so both readers get the same reason.
+      title={description}
+    >
+      This race published no gap to the winner, so there is no axis to place riders on.
+    </p>
+  );
+}
+
 export function FieldStrip({ marks, outside = [], size = 'md', caption, max }: FieldStripProps) {
   const model = buildFieldStrip(marks, outside, max);
   const g = GEOMETRY[size];
@@ -61,56 +85,62 @@ export function FieldStrip({ marks, outside = [], size = 'md', caption, max }: F
         </figcaption>
       ) : null}
 
-      <svg
-        role="img"
-        aria-label={model.description}
-        width="100%"
-        height={g.height}
-        className="border-border bg-surface block rounded-md border"
-      >
-        {/*
+      {model.max === null ? (
+        <NoAxis description={model.description} />
+      ) : (
+        <>
+          <svg
+            role="img"
+            aria-label={model.description}
+            width="100%"
+            height={g.height}
+            className="border-border bg-surface block rounded-md border"
+          >
+            {/*
           Both, deliberately. `aria-label` wins the accessible name, so this
           title is redundant for a screen reader — but it is what a browser
           shows on hover, which is the only way a sighted reader gets the same
           sentence. Neither alone covers both readers.
         */}
-        <title>{model.description}</title>
-        <line
-          x1="0"
-          x2="100%"
-          y1={g.axisY}
-          y2={g.axisY}
-          className="stroke-border"
-          strokeWidth={1}
-        />
-        {model.dots.map((dot, i) =>
-          dot.ours ? (
-            // Orange is the highlight and the ink ring carries the contrast, so
-            // the mark is not distinguished by colour alone (docs/brand.md).
-            <circle
-              key={`ours-${i}`}
-              cx={inset(dot.x)}
-              cy={g.axisY}
-              r={g.ours}
-              className="fill-accent stroke-fg"
-              strokeWidth={2}
+            <title>{model.description}</title>
+            <line
+              x1="0"
+              x2="100%"
+              y1={g.axisY}
+              y2={g.axisY}
+              className="stroke-border"
+              strokeWidth={1}
             />
-          ) : (
-            <circle
-              key={`field-${i}`}
-              cx={inset(dot.x)}
-              cy={g.axisY}
-              r={g.dot}
-              className="fill-muted/40"
-            />
-          ),
-        )}
-      </svg>
+            {model.dots.map((dot, i) =>
+              dot.ours ? (
+                // Orange is the highlight and the ink ring carries the contrast, so
+                // the mark is not distinguished by colour alone (docs/brand.md).
+                <circle
+                  key={`ours-${i}`}
+                  cx={inset(dot.x)}
+                  cy={g.axisY}
+                  r={g.ours}
+                  className="fill-accent stroke-fg"
+                  strokeWidth={2}
+                />
+              ) : (
+                <circle
+                  key={`field-${i}`}
+                  cx={inset(dot.x)}
+                  cy={g.axisY}
+                  r={g.dot}
+                  className="fill-muted/40"
+                />
+              ),
+            )}
+          </svg>
 
-      <div className="text-muted mt-0.5 flex justify-between text-[10px] font-bold">
-        <span className="text-fg">winner</span>
-        <span>+{Math.round(model.max)}%</span>
-      </div>
+          <div className="text-muted mt-0.5 flex justify-between text-[10px] font-bold">
+            <span className="text-fg">winner</span>
+            <span>+{Math.round(model.max)}%</span>
+          </div>
+        </>
+      )}
 
       {model.outside.length > 0 ? (
         <ul className="mt-1.5 flex list-none flex-wrap gap-1.5 p-0">
