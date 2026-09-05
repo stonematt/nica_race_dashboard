@@ -1,0 +1,207 @@
+{
+  "_comment": [
+    "The Descenders club config: the hand-maintained half of the database. Normalize never writes",
+    "any of it, and editing it never implies a re-ingest.",
+    "",
+    "IDENTITY IS NOT IN THIS FILE. This repository is public and the riders are minors, so a rider",
+    "here is a stable key and a plate mapping and nothing that names anyone. Real names live in a",
+    "separate JSON map of key -> display name kept OUTSIDE the working tree, the way the payload",
+    "corpus is (docs/fixtures.md); seeding merges it in when it is present. With no names file every",
+    "rider seeds as its own pseudonym (rider-a seeds as «RIDER-A»), the same redaction form the issue",
+    "threads use. Keeping the names file out of the tree rather than in .gitignore is what makes an",
+    "accidental commit impossible instead of merely discouraged.",
+    "",
+    "    ~/.local/share/nica_race_dashboard/config/rider-names.json",
+    "    { \"rider-a\": \"Firstname Lastname\", ... }",
+    "",
+    "The roster below is the club's 2025 plate set as the league published it, one rider per plate.",
+    "That is the honest starting point, not an adjudication: a rider who changed plates mid-season is",
+    "two entries here until a coach merges them into one rider with two bounded plates, and a reissued",
+    "plate is one entry until a coach splits it. Bounds are league round ordinals and are inclusive;",
+    "omit them for the whole season, which is the common case.",
+    "",
+    "    { \"key\": \"rider-a\", \"plates\": [ { \"plate\": \"204\", \"toRound\": 2 },",
+    "                                    { \"plate\": \"886\", \"fromRound\": 3 } ] }",
+    "",
+    "A bare string is the unbounded whole-season form and is shorthand for { \"plate\": \"202\" }.",
+    "",
+    "Squads are a coaching lens, not a scoring unit, and they carry no history. One squad holding the",
+    "roster is the starting point; split it into real practice groups by editing here."
+  ],
+  "club": "Descenders",
+  "season": 2025,
+  "scoringTeams": [
+    "Salem Composite",
+    "South Salem High School Descenders",
+    "Sprague High School Descenders"
+  ],
+  "riders": [
+    {
+      "key": "rider-a",
+      "plates": ["202"]
+    },
+    {
+      "key": "rider-b",
+      "plates": ["204"]
+    },
+    {
+      "key": "rider-c",
+      "plates": ["210"]
+    },
+    {
+      "key": "rider-d",
+      "plates": ["212"]
+    },
+    {
+      "key": "rider-e",
+      "plates": ["326"]
+    },
+    {
+      "key": "rider-f",
+      "plates": ["516"]
+    },
+    {
+      "key": "rider-g",
+      "plates": ["520"]
+    },
+    {
+      "key": "rider-h",
+      "plates": ["526"]
+    },
+    {
+      "key": "rider-i",
+      "plates": ["542"]
+    },
+    {
+      "key": "rider-j",
+      "plates": ["560"]
+    },
+    {
+      "key": "rider-k",
+      "plates": ["566"]
+    },
+    {
+      "key": "rider-l",
+      "plates": ["730"]
+    },
+    {
+      "key": "rider-m",
+      "plates": ["820"]
+    },
+    {
+      "key": "rider-n",
+      "plates": ["850"]
+    },
+    {
+      "key": "rider-o",
+      "plates": ["886"]
+    },
+    {
+      "key": "rider-p",
+      "plates": ["908"]
+    },
+    {
+      "key": "rider-q",
+      "plates": ["956"]
+    },
+    {
+      "key": "rider-r",
+      "plates": ["970"]
+    },
+    {
+      "key": "rider-s",
+      "plates": ["1014"]
+    },
+    {
+      "key": "rider-t",
+      "plates": ["1052"]
+    },
+    {
+      "key": "rider-u",
+      "plates": ["2018"]
+    },
+    {
+      "key": "rider-v",
+      "plates": ["2056"]
+    },
+    {
+      "key": "rider-w",
+      "plates": ["2062"]
+    },
+    {
+      "key": "rider-x",
+      "plates": ["2070"]
+    },
+    {
+      "key": "rider-y",
+      "plates": ["3010"]
+    },
+    {
+      "key": "rider-z",
+      "plates": ["3014"]
+    },
+    {
+      "key": "rider-aa",
+      "plates": ["3016"]
+    },
+    {
+      "key": "rider-ab",
+      "plates": ["3022"]
+    },
+    {
+      "key": "rider-ac",
+      "plates": ["3072"]
+    },
+    {
+      "key": "rider-ad",
+      "plates": ["4024"]
+    },
+    {
+      "key": "rider-ae",
+      "plates": ["5022"]
+    },
+    {
+      "key": "rider-af",
+      "plates": ["6004"]
+    }
+  ],
+  "squads": [
+    {
+      "name": "Descenders",
+      "members": [
+        "rider-a",
+        "rider-b",
+        "rider-c",
+        "rider-d",
+        "rider-e",
+        "rider-f",
+        "rider-g",
+        "rider-h",
+        "rider-i",
+        "rider-j",
+        "rider-k",
+        "rider-l",
+        "rider-m",
+        "rider-n",
+        "rider-o",
+        "rider-p",
+        "rider-q",
+        "rider-r",
+        "rider-s",
+        "rider-t",
+        "rider-u",
+        "rider-v",
+        "rider-w",
+        "rider-x",
+        "rider-y",
+        "rider-z",
+        "rider-aa",
+        "rider-ab",
+        "rider-ac",
+        "rider-ad",
+        "rider-ae",
+        "rider-af"
+      ]
+    }
+  ]
+}
