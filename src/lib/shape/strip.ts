@@ -80,7 +80,11 @@ function labelFor(level: number, ordinal: number): string {
 }
 
 /** Turn `data` into a tree of row counts under synthetic labels. */
-export function groupTreeOf(data: unknown, level = 1, counters = new Map<number, number>()): GroupTree {
+export function groupTreeOf(
+  data: unknown,
+  level = 1,
+  counters = new Map<number, number>(),
+): GroupTree {
   if (!isRecord(data)) {
     throw new ShapeCorpusError(
       `expected a group object at level ${level}, got ${Array.isArray(data) ? 'rows' : typeof data}. ` +
@@ -101,9 +105,7 @@ export function groupTreeOf(data: unknown, level = 1, counters = new Map<number,
 /** Every displayed expression, in payload order. Labels and styling go. */
 function fieldsOf(fields: unknown): ShapeField[] {
   if (!Array.isArray(fields)) return [];
-  return fields
-    .filter(isRecord)
-    .map((field) => ({ Expression: stringOr(field.Expression, '') }));
+  return fields.filter(isRecord).map((field) => ({ Expression: stringOr(field.Expression, '') }));
 }
 
 /**
@@ -187,7 +189,7 @@ export function stripConfigPayload(
   const raw =
     catalog.shape === '2025'
       ? (source.lists as unknown[])
-      : ((source.Tab as { Config: { Lists: unknown[] } }).Config.Lists);
+      : (source.Tab as { Config: { Lists: unknown[] } }).Config.Lists;
 
   const entries = catalogEntriesOf(raw);
   const base = {

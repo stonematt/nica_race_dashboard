@@ -20,11 +20,7 @@
  * `src/lib/shape/drift.ts` compares nothing that depends on them.
  */
 
-import {
-  assignFamily,
-  type Family,
-  type LayoutVariant,
-} from '../ingest/families.ts';
+import { assignFamily, type Family, type LayoutVariant } from '../ingest/families.ts';
 import type { PlacedList } from '../ingest/normalize.ts';
 import {
   checkExpressionsRecognized,

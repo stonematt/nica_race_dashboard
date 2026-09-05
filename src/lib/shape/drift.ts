@@ -45,10 +45,7 @@ export function describeDrift(finding: DriftFinding): string {
  *
  * An empty result means the candidate's shape is entirely accounted for.
  */
-export function driftAgainst(
-  baseline: IngestSnapshot,
-  candidate: IngestSnapshot,
-): DriftFinding[] {
+export function driftAgainst(baseline: IngestSnapshot, candidate: IngestSnapshot): DriftFinding[] {
   const findings: DriftFinding[] = [];
   const known = new Map(baseline.families.map((family) => [family.name, family]));
 
