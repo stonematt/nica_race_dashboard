@@ -72,6 +72,11 @@ jobs:
       # A schema edited without a migration is the failure that bites a year
       # later, when nobody remembers. If `generate` produces anything, the
       # committed migrations no longer describe the schema.
+      #
+      # `< /dev/null` because drizzle-kit prompts when it cannot tell a rename
+      # from a drop-and-add. On a runner there is nobody to answer, so give it an
+      # immediate EOF: the step fails and says why, instead of holding the job
+      # open until the timeout. A prompt means the drift is real either way.
       - name: Migration drift — schema and migrations agree
         run: |
           pnpm db:generate < /dev/null

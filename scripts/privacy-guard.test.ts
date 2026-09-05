@@ -101,6 +101,27 @@ describe('the name-shape rule', () => {
     ]);
   });
 
+  it('refuses a name carrying diacritics', () => {
+    // An ASCII-only class quietly exempts a subset of the riders, which is the
+    // worst possible thing for a guard whose whole job is covering all of them.
+    const content = JSON.stringify({ rows: [['214', 'José García', '00:41:12.3']] });
+    expect(scan([{ path: 'docs/rows.json', content }])).toHaveLength(1);
+    const shouted = JSON.stringify({ rows: [['214', 'JOSÉ GARCÍA', '00:41:12.3']] });
+    expect(scan([{ path: 'docs/shouted.json', content: shouted }])).toHaveLength(1);
+  });
+
+  it('refuses the surname-first order too', () => {
+    const content = JSON.stringify({ rows: [['214', 'Rivers, Jordan', '00:41:12.3']] });
+    expect(scan([{ path: 'docs/rows.json', content }])).toHaveLength(1);
+  });
+
+  it('refuses hyphenated and apostrophed names', () => {
+    for (const name of ['Anne-Marie Dubois', "O'Brien Smith"]) {
+      const content = JSON.stringify({ rows: [[name]] });
+      expect(scan([{ path: 'docs/rows.json', content }])).toHaveLength(1);
+    }
+  });
+
   it('passes a pseudonym, which is how redacted examples are written here', () => {
     const content = JSON.stringify({ rows: [['214', '«RIDER-A»', '00:41:12.3']] });
     expect(scan([{ path: 'docs/worked-example.json', content }])).toEqual([]);

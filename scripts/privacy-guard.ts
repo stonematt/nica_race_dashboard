@@ -19,9 +19,10 @@
  *   2. A tracked RaceResult-shaped payload must carry NO rows. This is the rule
  *      that guards the committed shape corpus (#31): a stripper regression that
  *      starts emitting real rows fails the build rather than publishing them.
- *   3. No tracked JSON or CSV carries a value shaped like a person's full name.
- *      This is the name-shape assertion #28 asks for. Pseudonyms («RIDER-A»),
- *      which is how redacted examples are written in this repo, pass.
+ *   3. No tracked JSON or CSV carries a value shaped like a person's full name,
+ *      in either order and with diacritics. This is the name-shape assertion #28
+ *      asks for. Pseudonyms («RIDER-A»), which is how redacted examples are
+ *      written in this repo, pass.
  *
  * The core is a pure function over (path, content) pairs so it can be tested
  * against synthetic payloads without a git repo and without reading the real
@@ -38,14 +39,26 @@ export const FORBIDDEN_PREFIXES = ['fixtures/', 'data/'];
 const SCANNED_EXTENSIONS = ['.json', '.csv'];
 
 /**
- * A person's name as RaceResult publishes it: "Firstname Lastname", or the
- * `ucase([DisplayName])` variant, optionally with a middle name, hyphen or
- * apostrophe. Deliberately conservative — this is a tripwire, not a classifier,
- * and a false positive costs one red build while a false negative publishes a
- * child's name.
+ * One word of a person's name: "Jordan", the `ucase([DisplayName])` variant
+ * "JORDAN", or a hyphenated or apostrophed compound. Unicode-aware on purpose —
+ * an ASCII-only class quietly exempts every rider whose name carries a
+ * diacritic, and "the guard does not cover some of the children" is not a
+ * tradeoff anyone chose.
  */
-const NAME_SHAPE = /\b[A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)? [A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)?\b/;
-const SHOUTED_NAME_SHAPE = /\b[A-Z]{2,}(?:['\-][A-Z]+)? [A-Z]{2,}(?:['\-][A-Z]+)?\b/;
+const NAME_WORD = String.raw`(?:\p{Lu}\p{Ll}+(?:['’\-]\p{Lu}?\p{Ll}+)?|\p{Lu}{2,}(?:['’\-]\p{Lu}+)?)`;
+
+/**
+ * Two name words, in either order RaceResult publishes them: "Jordan Rivers" or
+ * "Rivers, Jordan".
+ *
+ * This is a tripwire, not a classifier, and it is wrong in both directions. It
+ * false-positives on any two capitalised words in a scanned value — a venue, a
+ * category, a place — which costs one red build and a look. It false-negatives
+ * on a mononym, an initial ("J. Rivers"), and any name a two-word shape does not
+ * describe, which is why it is the third rule and not the only one: the path
+ * rule and the payload-rows rule do not depend on recognising a name at all.
+ */
+const NAME_SHAPE = new RegExp(`(?<!\\p{L})${NAME_WORD}(?:, | )${NAME_WORD}(?!\\p{L})`, 'u');
 
 /** A redacted stand-in. The established form in this repo is «RIDER-A». */
 const PSEUDONYM = /^«[^»]+»$/;
@@ -94,7 +107,7 @@ function* strings(value: unknown): Generator<string> {
 
 function looksLikeAName(value: string): boolean {
   if (PSEUDONYM.test(value.trim())) return false;
-  return NAME_SHAPE.test(value) || SHOUTED_NAME_SHAPE.test(value);
+  return NAME_SHAPE.test(value);
 }
 
 /**
