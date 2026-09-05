@@ -16,6 +16,13 @@
  *     interpretable against the config that shipped with it. A config you
  *     cannot replay is a normalize you cannot reproduce.
  *
+ *   - **A row's URL and status are reconstructed, not recorded.** The corpus
+ *     files are response bodies with no envelope, so `url` is rebuilt from the
+ *     archived config and `httpStatus` is asserted as 200. The URL is
+ *     provenance — it says which request produced the row — and a list URL
+ *     embeds the config's short-lived `key`, so it is not a request anyone can
+ *     repeat. Nothing downstream may treat either as observed.
+ *
  *   - **A list's identity comes from the config, not from its filename.** The
  *     fixture filenames are a slug someone chose during the crawl; the payload
  *     carries `list.ListName`, and the config turns that into the stable hex
@@ -34,17 +41,13 @@ import { basename, join } from 'node:path';
 import * as schema from '../db/schema.ts';
 import { CORPUS_SEASONS, requireCorpus } from '../fixtures.ts';
 import { configUrl, listIdForName, listUrl, readCatalog } from './catalog.ts';
+import { IngestError } from './errors.ts';
 import { archive, CONFIG_LIST_NAME, type RawFetchRecord } from './raw.ts';
 
 type Db = PgliteDatabase<typeof schema>;
 
 /** A corpus file that is missing, malformed, or cannot be placed. */
-export class CorpusError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CorpusError';
-  }
-}
+export class CorpusError extends IngestError {}
 
 /** One event's files, as they sit on disk. */
 export interface CorpusEvent {
@@ -111,14 +114,12 @@ export function groupCorpusFiles(season: number, dir: string, fileNames: string[
     }
   }
 
-  return [...configs]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([eventId, configPath]) => ({
-      season,
-      eventId,
-      configPath,
-      listPaths: lists.get(eventId) ?? [],
-    }));
+  return [...configs.keys()].sort().map((eventId) => ({
+    season,
+    eventId,
+    configPath: configs.get(eventId)!,
+    listPaths: lists.get(eventId) ?? [],
+  }));
 }
 
 /** Group the whole corpus into events, season by season. */
@@ -162,6 +163,9 @@ export function buildEventRecords(
       listId: null,
       listName: CONFIG_LIST_NAME,
       url: configUrl(event.eventId, catalog.shape),
+      // The corpus records no status. 200 is the only honest value: a file
+      // exists and parses, so the request that produced it succeeded. Nothing
+      // downstream may read this as evidence of a status that was observed.
       httpStatus: 200,
       payload: configPayload,
     },
@@ -206,20 +210,26 @@ export function readEventRecords(event: CorpusEvent): RawFetchRecord[] {
  * Appends, so running it twice doubles the row count — by design. The second
  * pass writes rows carrying the same `content_hash` as the first, which is what
  * "we re-read the source and it had not changed" looks like.
+ *
+ * **The unit of failure is the event**, per the standing ingest decision: an
+ * event either contributes every one of its payloads or none of them, because
+ * `readEventRecords` throws before a single row is written and `archive` writes
+ * the event in one statement. A failure partway through the corpus leaves the
+ * earlier events archived, which is harmless precisely because the layer only
+ * appends — re-running costs a duplicate row, never a wrong one.
  */
-export async function loadCorpus(
-  db: Db,
-  options: { root?: string } = {},
-): Promise<LoadCorpusResult> {
-  const events = discoverCorpus(options.root ?? requireCorpus());
+export async function loadCorpus(db: Db): Promise<LoadCorpusResult> {
+  const events = discoverCorpus();
 
   let configs = 0;
   let lists = 0;
   for (const event of events) {
     const records = readEventRecords(event);
     await archive(db, records);
-    configs += records.filter((record) => record.listId === null).length;
-    lists += records.filter((record) => record.listId !== null).length;
+    for (const record of records) {
+      if (record.listId === null) configs += 1;
+      else lists += 1;
+    }
   }
 
   return { events: events.length, configs, lists, rows: configs + lists };

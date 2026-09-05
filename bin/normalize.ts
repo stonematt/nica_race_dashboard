@@ -35,6 +35,7 @@ import { loadCorpus } from '../src/lib/ingest/corpus.ts';
 if (!process.argv.includes('--load-fixtures')) {
   console.error(
     'usage: node bin/normalize.ts --load-fixtures\n' +
+      '  Run `pnpm db:migrate` first — this writes into an existing raw_fetch.\n' +
       '  Decoding is not implemented yet — see issues #23 and #25.',
   );
   process.exit(2);

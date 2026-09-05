@@ -23,6 +23,8 @@
  * on the hex ID (see src/lib/db/schema.ts).
  */
 
+import { IngestError } from './errors.ts';
+
 /** Which API shape a config response came from. */
 export type SourceShape = '2025' | '2026';
 
@@ -32,10 +34,12 @@ export interface SourceList {
   id: string;
   /** The exact `listname` query parameter, pipe and numeric prefix included. */
   name: string;
-  /** `''` or `'hidden'`. A hidden list is still fetchable. */
+  /**
+   * `''` or `'hidden'`. A hidden list is still published and still fetchable —
+   * the prologue TT list is hidden at seven of the eight 2025 events — so this
+   * is recorded, never used to decide whether to archive.
+   */
   mode: string;
-  /** `'Individual Results'` and friends in 2025; empty throughout 2026. */
-  showAs: string;
 }
 
 /** An event's config, reduced to the parts ingest depends on. */
@@ -45,19 +49,12 @@ export interface EventCatalog {
   shape: SourceShape;
   /** The short-lived token every list request needs. */
   key: string;
-  /** `Race 4 - ORLeague Newport Gnarnia - North`. */
-  eventName: string;
   /** Deduplicated by ID, in the order the config publishes them. */
   lists: SourceList[];
 }
 
 /** A config that cannot be read, or that reads as empty. Never recoverable. */
-export class SourceCatalogError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SourceCatalogError';
-  }
-}
+export class SourceCatalogError extends IngestError {}
 
 const HOST = 'https://my.raceresult.com';
 
@@ -125,7 +122,6 @@ export function readCatalog(eventId: string, payload: unknown): EventCatalog {
       id: stringField(entry, 'ID', `${where} list ${index}`),
       name: stringField(entry, 'Name', `${where} list ${index}`),
       mode: typeof entry.Mode === 'string' ? entry.Mode : '',
-      showAs: typeof entry.ShowAs === 'string' ? entry.ShowAs : '',
     };
 
     const seen = byId.get(list.id);
@@ -149,7 +145,6 @@ export function readCatalog(eventId: string, payload: unknown): EventCatalog {
     eventId,
     shape,
     key: stringField(payload, 'key', where),
-    eventName: stringField(payload, 'eventname', where),
     lists: [...byId.values()],
   };
 }
@@ -186,6 +181,11 @@ export function listIdForName(catalog: EventCatalog, listName: string): string {
  * The 2026 move is config-only. Note that config does *not* redirect: the 2025
  * path has to stay on `RRPublish/data/config` rather than being folded into the
  * newer one.
+ *
+ * The shape is a parameter because this records where an archived payload came
+ * from, after the fact. A live fetch cannot use it that way — it has to pick a
+ * path *before* it has a response to detect the shape from, which is issue #15's
+ * problem and is why the empty-catalog check in `readCatalog` exists at all.
  */
 export function configUrl(eventId: string, shape: SourceShape): string {
   const path = shape === '2026' ? 'results/config' : 'RRPublish/data/config';

@@ -142,7 +142,7 @@ describe('the ingest modules', () => {
       /\b(update|delete\s+from)\s+raw_fetch\b/i,
     ];
 
-    const dir = join(import.meta.dirname);
+    const dir = import.meta.dirname;
     const sources = readdirSync(dir).filter(
       (name) => name.endsWith('.ts') && !name.includes('.test.'),
     );

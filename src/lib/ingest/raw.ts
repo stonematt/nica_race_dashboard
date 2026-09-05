@@ -13,9 +13,10 @@
  * An archive that decides what is worth keeping is an archive you cannot
  * reconstruct a decode from.
  *
- * Two callers: `bin/fetch.ts` archives from the network, and
- * `src/lib/ingest/corpus.ts` archives the fixture corpus already on disk. Both
- * land the same rows through this one door.
+ * `src/lib/ingest/corpus.ts` archives the fixture corpus already on disk
+ * through it. `bin/fetch.ts` will archive from the network through the same
+ * door when it is written (issue #15); it is a stub today and calls nothing
+ * here.
  */
 
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
@@ -34,8 +35,17 @@ export interface RawFetchRecord {
   listId: string | null;
   /** The published list name, or `CONFIG_LIST_NAME` for a config fetch. */
   listName: string;
-  /** The URL this payload came from, so a decode can be replayed. */
+  /**
+   * Where this payload came from.
+   *
+   * Provenance, not a live handle. A list URL carries the config's short-lived
+   * `key`, so it records *which request produced this row* rather than a
+   * request you can repeat — and a corpus row's URL is reconstructed from the
+   * archived config, because the corpus files do not carry the URL they were
+   * fetched from.
+   */
   url: string;
+  /** As reported by the fetch. A corpus row asserts 200; see corpus.ts. */
   httpStatus: number;
   /** The response body, verbatim. */
   payload: unknown;

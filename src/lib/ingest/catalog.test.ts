@@ -55,7 +55,6 @@ describe('readCatalog', () => {
     expect(catalog.shape).toBe('2025');
     expect(catalog.eventId).toBe('357242');
     expect(catalog.key).toBe('dc364c6c45dec11a1e1dd1b477c621bb');
-    expect(catalog.eventName).toBe('Race 1 - ORLeague - Old Oak Prologue');
   });
 
   it('reads the 2026 shape from Tab.Config.Lists', () => {
