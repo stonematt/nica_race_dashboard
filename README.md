@@ -89,6 +89,7 @@ Schema lives in `src/lib/db/schema.ts`; migrations in `src/lib/db/migrations/`. 
 | `pnpm build` / `pnpm start`         | Production build and serve                    |
 | `pnpm test`                         | Vitest, once                                  |
 | `pnpm test:local`                   | The local-only lane, which reads the corpus   |
+| `pnpm privacy:check`                | Fail if payload-shaped data is committed      |
 | `pnpm test:watch`                   | Vitest, watching                              |
 | `pnpm typecheck`                    | `tsc --noEmit`                                |
 | `pnpm lint`                         | ESLint                                        |
@@ -115,6 +116,18 @@ real RaceResult fixture corpus — minors' names, schools, grades and finish tim
 runs only under `pnpm test:local`, never in CI. See
 [`docs/fixtures.md`](docs/fixtures.md) for the corpus, and for the pre-commit hook that
 `pnpm install` arms to stop those payloads ever being committed.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request into `dev` and `main`: the privacy
+guard first, then `typecheck`, `lint`, `format:check` and `test`, then a migration-drift
+check and a fresh-database migration. Node comes from `.nvmrc` — one line, deliberately
+not a matrix, because this app runs on one runtime.
+
+CI never runs `pnpm test:local`, `pnpm fetch`, `pnpm normalize` or `pnpm seed`, and
+**scheduled ingest must never be added while this repo is public**: `bin/fetch.ts` pulls
+minors' names from a live API. The workflow says so at the top of the file, and
+`scripts/ci-workflow.test.ts` holds it.
 
 ## Contributing
 
