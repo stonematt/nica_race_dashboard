@@ -108,6 +108,44 @@ examples, test fixtures — must have rider names redacted first. The pattern us
 issue threads is stable pseudonyms (`«RIDER-A»`), which keeps worked calculations
 verifiable while carrying no identity.
 
+## The shape corpus — what _is_ committed
+
+`shape-corpus/` holds every published list of every 2025 event and the 2026
+opener, reduced to shape: `DataFields` verbatim, every `Fields[].Expression`,
+every `Orders[].Grouping`, `ListName`, `ListFooterText`, the config's list
+catalog, and the `data` nesting with an integer row count where the rows were.
+60 files, 248K, and **not one row**. Issue
+[#31](https://github.com/stonematt/nica_race_dashboard/issues/31).
+
+It exists because drift detection is the part of ingest with no human in the
+loop, and every refusal it makes — family signature matching, alias collision,
+unknown-expression fatality, required fields, the empty-catalog trap, repeat
+group widths, the footer row count — reads columns and nesting rather than
+cells. So the layer those assertions read carries no names, plates or times and
+can be published, while the fidelity suite that needs real rows stays local.
+
+```
+node src/lib/shape/strip.ts      # regenerate from fixtures/, then commit the diff
+```
+
+There is deliberately no package script: `bin/*.ts` already run this way under
+Node's native type stripping, and the command is what
+`src/lib/shape/type-stripping.test.ts` keeps working. `src/lib/shape/strip.local.test.ts`
+fails in the local lane when the committed corpus has gone stale against
+`fixtures/`.
+
+Two things to know before editing the format:
+
+- **Group labels are synthesized** (`#1_group-1-1`). The real ones are race
+  categories and packed team strings; nothing in the detection layer reads a
+  label, only the depth and the counts.
+- **`data` is `{}` and the nesting lives in `shape.groups` as integers.** That
+  is not decoration. The guard's `rowsOf()` flattens one level, so a nested
+  `data` with emptied groups is counted as rows and fails rule 2 — a correctly
+  stripped file would be unpublishable. Keeping `DataFields` and `data` at the
+  top level keeps rule 2 armed over the key it understands, and a tree of
+  integers has nowhere to put a row.
+
 ## Tests: two lanes, split by what they read
 
 | lane       | command           | reads                        | runs in CI |
