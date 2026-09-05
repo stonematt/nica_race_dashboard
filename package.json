@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@10.33.2",
   "scripts": {
+    "prepare": "node scripts/install-git-hooks.mjs",
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start",

@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# Refuse any commit that stages a path under fixtures/.
+#
+# This repository is public and the RaceResult payloads carry minors' full
+# names, schools, grades, plates and finish times. The corpus lives in the tree
+# (issue #30) so the fidelity suite can find it with no machine-local setting;
+# this hook is what replaces the guarantee we gave up by moving it in.
+#
+# .gitignore is a request and `git add -f` overrides it. This reads the index,
+# so it catches the forced add too — by then the payload is staged either way.
+#
+# Installed by `pnpm install` (scripts/install-git-hooks.mjs sets
+# core.hooksPath). POSIX sh with no dependencies on purpose: it has to run
+# during a commit on a machine where node_modules may be half-installed.
+
+set -eu
+
+# :(top) anchors the pathspec at the repo root rather than the caller's cwd.
+# --diff-filter=ACMR: additions, copies, modifications, renames. A staged
+# deletion of a payload that somehow reached history is exactly what someone
+# cleaning up needs to be able to commit.
+staged=$(git diff --cached --name-only --diff-filter=ACMR -- ':(top)fixtures' || true)
+
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+{
+  echo
+  echo '  BLOCKED: this commit stages fixture payloads.'
+  echo
+  printf '%s\n' "$staged" | sed 's/^/    /'
+  echo
+  echo "  This repository is public and these payloads carry minors' full names,"
+  echo '  schools, grades, plates and finish times. Nothing under fixtures/ is ever'
+  echo '  committed — not redacted, not "just the small one", not temporarily.'
+  echo
+  echo '  If you have data that genuinely belongs in the repo, it does not belong'
+  echo '  under fixtures/. Move it out, pseudonymize it («RIDER-A»), and commit it'
+  echo '  from its own path.'
+  echo
+  echo '  See docs/fixtures.md. If you are certain this block is wrong, the escape'
+  echo '  is `git commit --no-verify` — take it only as a deliberate decision, and'
+  echo '  say in the pull request why the payload is safe to publish.'
+  echo
+} >&2
+
+exit 1
