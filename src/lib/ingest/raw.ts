@@ -19,6 +19,7 @@
  * here.
  */
 
+import { desc } from 'drizzle-orm';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import { createHash } from 'node:crypto';
 import * as schema from '../db/schema.ts';
@@ -113,4 +114,46 @@ export async function archive(db: Db, records: readonly RawFetchRecord[]): Promi
 
   await db.insert(schema.rawFetch).values(rows);
   return rows.length;
+}
+
+/** One archived payload, as normalize reads it back. */
+export interface ArchivedPayload {
+  season: number;
+  eventId: string;
+  listId: string | null;
+  listName: string;
+  fetchedAt: Date;
+  payload: unknown;
+}
+
+/**
+ * The latest archived payload for every `(event_id, list_id)`.
+ *
+ * Normalize reads this and nothing else — no network, ever. The archive is
+ * append-only, so "latest" is what makes a correction take effect: a re-fetch
+ * appends a row with a different `content_hash`, and the next normalize decodes
+ * that one. Recovery from a decode bug is fix-the-code-and-re-normalize, never
+ * re-fetch.
+ *
+ * The tie-break on `id` matters. Every row in one archiving pass takes the same
+ * `fetched_at` default, so ordering on the timestamp alone leaves the winner
+ * undefined for exactly the case this has to be right about.
+ */
+export async function latestPayloads(db: Db): Promise<ArchivedPayload[]> {
+  return db
+    .selectDistinctOn([schema.rawFetch.eventId, schema.rawFetch.listId], {
+      season: schema.rawFetch.season,
+      eventId: schema.rawFetch.eventId,
+      listId: schema.rawFetch.listId,
+      listName: schema.rawFetch.listName,
+      fetchedAt: schema.rawFetch.fetchedAt,
+      payload: schema.rawFetch.payload,
+    })
+    .from(schema.rawFetch)
+    .orderBy(
+      schema.rawFetch.eventId,
+      schema.rawFetch.listId,
+      desc(schema.rawFetch.fetchedAt),
+      desc(schema.rawFetch.id),
+    );
 }

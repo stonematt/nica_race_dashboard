@@ -49,6 +49,12 @@ export interface EventCatalog {
   shape: SourceShape;
   /** The short-lived token every list request needs. */
   key: string;
+  /**
+   * The config's `eventname` — `Race 4 - ORLeague Newport Gnarnia - North`.
+   * The only place the source states which league race a payload belongs to,
+   * so it is what `src/lib/ingest/calendar.ts` reads the round ordinal from.
+   */
+  eventName: string;
   /** Deduplicated by ID, in the order the config publishes them. */
   lists: SourceList[];
 }
@@ -145,6 +151,7 @@ export function readCatalog(eventId: string, payload: unknown): EventCatalog {
     eventId,
     shape,
     key: stringField(payload, 'key', where),
+    eventName: stringField(payload, 'eventname', where),
     lists: [...byId.values()],
   };
 }
