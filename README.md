@@ -22,7 +22,7 @@ Early scaffolding — pre-MVP. What works today:
 - the authenticated shell: a signed-in landing page and a sign-in page, on the vendored brand tokens
 - unit suites over the admission rules, the provider wiring and the brand-token check, and integration suites over seeding and the domain views against a real in-memory Postgres
 
-What doesn't exist yet: any page that reads the database, live fetching (`bin/fetch.ts` is a stub), normalization (`bin/normalize.ts` is a stub), and the hosted-database path. Planning is charted on the issue tracker — `gh issue list --label "wayfinder:map"` finds the map, and the map holds the destination, the domain vocabulary, and the standing decisions.
+What doesn't exist yet: any page that reads the database, live fetching (`bin/fetch.ts` is a stub), decoding archived payloads into the normalized tables, and the hosted-database path. The append-only raw layer is real — `node bin/normalize.ts --load-fixtures` archives the local fixture corpus into it without touching the network. Planning is charted on the issue tracker — `gh issue list --label "wayfinder:map"` finds the map, and the map holds the destination, the domain vocabulary, and the standing decisions.
 
 ## Stack
 
@@ -100,7 +100,7 @@ Schema lives in `src/lib/db/schema.ts`; migrations in `src/lib/db/migrations/`. 
 | `pnpm db:studio`                    | Drizzle Studio                                |
 | `pnpm seed`                         | Seed the first admin (see above)              |
 | `pnpm fetch`                        | Pull from RaceResult _(stub)_                 |
-| `pnpm normalize`                    | Normalize raw payloads _(stub)_               |
+| `pnpm normalize --load-fixtures`    | Archive the local corpus into `raw_fetch`     |
 
 ## Testing
 
