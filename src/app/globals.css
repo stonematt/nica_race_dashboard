@@ -1,0 +1,60 @@
+/*
+ * Brand tokens, vendored from the sibling repo `stonematt/scd-brand` at commit
+ * 25c5f87 (`DESIGN.md`, status APPROVED).
+ *
+ * Vendored by copy, deliberately: `scd-brand` is **private** and this repo is
+ * **public**, so a git submodule would fail for every clone that is not the
+ * owner's — CI included. See `docs/brand.md` for the full reasoning, the drift
+ * procedure, and how to reskin this app for another club.
+ *
+ * Values are DESIGN.md's, compared by **normalized value, not by character**:
+ * Prettier rewrites this copy (it already turned DESIGN.md's `0.20` into `0.2`
+ * below), so textual identity is not a property this file can hold. Run
+ * `pnpm brand:check` to diff the two; it skips when the sibling repo is absent.
+ *
+ * Tailwind 4's @theme *is* CSS custom properties and takes OKLch natively, so
+ * there is no token build step (issue #6). Names are namespaced as Tailwind 4
+ * requires (--color-*, --font-*).
+ *
+ * The `--font-*` stacks are DESIGN.md's, prefixed with the `next/font` face
+ * variables that `layout.tsx` self-hosts. `brand:check` strips that prefix
+ * before comparing. Issue #13.
+ */
+
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: oklch(98.3% 0.005 95); /* #faf9f4 paper */
+  --color-surface: oklch(100% 0 0); /* #ffffff */
+  --color-fg: oklch(21% 0 0); /* #0d0d0d ink */
+  --color-muted: oklch(54% 0 0); /* #6e6e6e */
+  --color-border: oklch(91% 0 0); /* #e7e7e7 */
+  --color-accent: oklch(73% 0.187 52); /* #FF8000 ORANGE — primary, most prominent */
+  --color-blue: oklch(57% 0.21 262); /* #0072FF dynamic */
+  --color-aqua: oklch(89% 0.15 185); /* #00FFE9 dynamic */
+  --color-navy: oklch(45% 0.06 252); /* #405C80 ground */
+  --color-brown: oklch(48% 0.05 62); /* #806040 ground */
+  --color-success: oklch(60% 0.13 150);
+  --color-warn: oklch(78% 0.14 75);
+  --color-danger: oklch(58% 0.2 28);
+
+  --font-display: var(--font-display-face), 'Anton', 'Oswald', Impact, sans-serif;
+  --font-body:
+    var(--font-body-face), 'Nunito', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    /* Nunito's spec in DESIGN.md: lh 1.6. */
+    line-height: 1.6;
+  }
+
+  /*
+   * Ink on orange, never white — DESIGN.md's one hard contrast rule. Stated
+   * here as well as in review so a new orange surface inherits it by default
+   * rather than by remembering.
+   */
+  .on-accent {
+    color: var(--color-fg);
+  }
+}
