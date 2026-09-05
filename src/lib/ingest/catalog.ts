@@ -24,6 +24,7 @@
  */
 
 import { IngestError } from './errors.ts';
+import { isRecord } from '../is-record.ts';
 
 /** Which API shape a config response came from. */
 export type SourceShape = '2025' | '2026';
@@ -63,10 +64,6 @@ export interface EventCatalog {
 export class SourceCatalogError extends IngestError {}
 
 const HOST = 'https://my.raceresult.com';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function stringField(source: Record<string, unknown>, field: string, where: string): string {
   const value = source[field];

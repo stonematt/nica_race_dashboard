@@ -66,6 +66,7 @@ import {
   type SourceShape,
 } from './catalog.ts';
 import { IngestError } from './errors.ts';
+import { isRecord } from '../is-record.ts';
 import { archive, CONFIG_LIST_NAME, type RawFetchRecord } from './raw.ts';
 import { REQUEST_SPACING_MS, USER_AGENT, type PoliteClient } from './transport.ts';
 
@@ -127,10 +128,6 @@ function configPathOf(url: string, eventId: string): string {
  */
 function configPathFor(eventId: string, shape: SourceShape): string {
   return configPathOf(configUrl(eventId, shape), eventId);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
