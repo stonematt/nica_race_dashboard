@@ -1,0 +1,59 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "363499",
+    "listId": "674D5B",
+    "hidden": false,
+    "groups": {
+      "#1_group-1-1": {
+        "#1_group-2-1": 3,
+        "#2_group-2-2": 22
+      }
+    }
+  },
+  "list": {
+    "ListName": "02 - Result Lists|Team Results",
+    "ListFooterText": "",
+    "Fields": [
+      {
+        "Expression": "switch([TS199.RANK]>0;[TS199.RANK];[TS299.RANK]>0;[TS299.RANK];[TS399.RANK]>0;[TS399.RANK])"
+      },
+      {
+        "Expression": "CLUB"
+      },
+      {
+        "Expression": "ifPositive(choose([Division];[TS1.DECIMALTIME2];[TS2.DECIMALTIME2];[TS3.DECIMALTIME2]))"
+      },
+      {
+        "Expression": "choose([Division];[TS199.TIME1];[TS299.TIME1];[TS399.TIME1])"
+      }
+    ],
+    "Orders": [
+      {
+        "Expression": "SchoolType",
+        "Grouping": 1
+      },
+      {
+        "Expression": "#Division [Division]",
+        "Grouping": 1
+      },
+      {
+        "Expression": "choose([Division];[TS199.RANK];[TS299.RANK];[TS399.RANK])",
+        "Grouping": 0
+      },
+      {
+        "Expression": "CLUB",
+        "Grouping": 0
+      }
+    ]
+  },
+  "DataFields": [
+    "BIB",
+    "ID",
+    "switch([TS199.RANK]>0;[TS199.RANK];[TS299.RANK]>0;[TS299.RANK];[TS399.RANK]>0;[TS399.RANK])",
+    "CLUB",
+    "ifPositive(choose([Division];[TS1.DECIMALTIME2];[TS2.DECIMALTIME2];[TS3.DECIMALTIME2]))",
+    "choose([Division];[TS199.TIME1];[TS299.TIME1];[TS399.TIME1])"
+  ],
+  "data": {}
+}

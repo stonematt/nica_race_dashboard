@@ -1,0 +1,123 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "359478",
+    "listId": "3A294C",
+    "hidden": false,
+    "groups": {
+      "#1_group-1-1": {
+        "#1_group-2-1": {
+          "#1_group-3-1": 8,
+          "#2_group-3-2": 8,
+          "#3_group-3-3": 8
+        },
+        "#2_group-2-2": {
+          "#4_group-3-4": 4,
+          "#5_group-3-5": 4,
+          "#6_group-3-6": 4,
+          "#7_group-3-7": 4,
+          "#8_group-3-8": 4,
+          "#9_group-3-9": 4,
+          "#10_group-3-10": 4,
+          "#11_group-3-11": 4,
+          "#12_group-3-12": 4,
+          "#13_group-3-13": 3,
+          "#14_group-3-14": 3,
+          "#15_group-3-15": 4,
+          "#16_group-3-16": 3,
+          "#17_group-3-17": 4,
+          "#18_group-3-18": 4,
+          "#19_group-3-19": 3,
+          "#20_group-3-20": 3,
+          "#21_group-3-21": 3,
+          "#22_group-3-22": 4,
+          "#23_group-3-23": 4,
+          "#24_group-3-24": 1,
+          "#25_group-3-25": 1
+        }
+      },
+      "#2_group-1-2": {
+        "#3_group-2-3": {
+          "#26_group-3-26": 8,
+          "#27_group-3-27": 8
+        },
+        "#4_group-2-4": {
+          "#28_group-3-28": 4,
+          "#29_group-3-29": 4,
+          "#30_group-3-30": 4,
+          "#31_group-3-31": 4,
+          "#32_group-3-32": 4,
+          "#33_group-3-33": 4,
+          "#34_group-3-34": 4,
+          "#35_group-3-35": 3
+        }
+      }
+    }
+  },
+  "list": {
+    "ListName": "02 - Result Lists|Team Results - Detailed",
+    "ListFooterText": "",
+    "Fields": [
+      {
+        "Expression": "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])"
+      },
+      {
+        "Expression": "DisplayBib"
+      },
+      {
+        "Expression": "ucase([DisplayName])"
+      },
+      {
+        "Expression": "DisplayPoints"
+      },
+      {
+        "Expression": "SexMF"
+      },
+      {
+        "Expression": "CONTEST.TYPE"
+      },
+      {
+        "Expression": "CONTEST.NAME"
+      }
+    ],
+    "Orders": [
+      {
+        "Expression": "SchoolType",
+        "Grouping": 1
+      },
+      {
+        "Expression": "#Division [Division]",
+        "Grouping": 1
+      },
+      {
+        "Expression": "choose([Division];[TS199.RANK];[TS299.RANK];[TS399.RANK])",
+        "Grouping": 0
+      },
+      {
+        "Expression": "choose([Division];[TS199.RANK] & \".///\" & [CLUB] & \"///\" & [TS199.TIME1] & \" Points /// Penalty Points: \" & [TS1.DECIMALTIME2];[TS299.RANK] & \".///\" & [CLUB] & \"///\" & [TS299.TIME1] & \" Points /// Penalty Points: \" & [TS2.DECIMALTIME2];[TS399.RANK] & \".///\" & [CLUB] & \"///\" & [TS399.TIME1] & \" Points /// Penalty Points: \" & [TS3.DECIMALTIME2])",
+        "Grouping": 1
+      },
+      {
+        "Expression": "choose([Division];[TS1.SCORED];[TS2.SCORED];[TS3.SCORED])",
+        "Grouping": 0
+      },
+      {
+        "Expression": "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])",
+        "Grouping": 0
+      }
+    ]
+  },
+  "DataFields": [
+    "BIB",
+    "ID",
+    "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])",
+    "DisplayBib",
+    "ucase([DisplayName])",
+    "DisplayPoints",
+    "SexMF",
+    "CONTEST.TYPE",
+    "CONTEST.NAME",
+    "switch([CONTEST.TYPE]=\"Boys\";\"BG(#a4affe)\";[CONTEST.TYPE]=\"Girls\";\"BG(#ffb3ee)\";[CONTEST.TYPE]=\"Open\";\"BG(#fff)\")"
+  ],
+  "data": {}
+}

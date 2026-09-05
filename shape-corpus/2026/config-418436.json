@@ -1,0 +1,30 @@
+{
+  "shape": {
+    "season": 2026,
+    "eventId": "418436",
+    "sourceShape": "2026"
+  },
+  "key": "«KEY»",
+  "eventname": "NICA Oregon - Race 1 - Old Oak Prologue",
+  "Tab": {
+    "Config": {
+      "Lists": [
+        {
+          "ID": "F1A053",
+          "Name": "Online|Individual Results",
+          "Mode": ""
+        },
+        {
+          "ID": "C6D0BA",
+          "Name": "Online|Individuals Results - By Team",
+          "Mode": ""
+        },
+        {
+          "ID": "D4B9DB",
+          "Name": "Online|Individual Results - Series Overall",
+          "Mode": ""
+        }
+      ]
+    }
+  }
+}

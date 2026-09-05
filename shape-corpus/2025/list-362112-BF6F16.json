@@ -1,0 +1,134 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "362112",
+    "listId": "BF6F16",
+    "hidden": false,
+    "groups": {
+      "#1_group-1-1": {
+        "#1_group-2-1": {
+          "#1_group-3-1": 9,
+          "#2_group-3-2": 19,
+          "#3_group-3-3": 12
+        },
+        "#2_group-2-2": {
+          "#4_group-3-4": 7,
+          "#5_group-3-5": 3,
+          "#6_group-3-6": 6,
+          "#7_group-3-7": 4,
+          "#8_group-3-8": 6,
+          "#9_group-3-9": 4,
+          "#10_group-3-10": 5,
+          "#11_group-3-11": 5,
+          "#12_group-3-12": 6,
+          "#13_group-3-13": 2,
+          "#14_group-3-14": 4,
+          "#15_group-3-15": 2,
+          "#16_group-3-16": 5,
+          "#17_group-3-17": 6,
+          "#18_group-3-18": 7,
+          "#19_group-3-19": 8,
+          "#20_group-3-20": 5
+        }
+      }
+    }
+  },
+  "list": {
+    "ListName": "02 - Result Lists|Individual Results - South - By Team",
+    "ListFooterText": "Number of records: 125",
+    "Fields": [
+      {
+        "Expression": "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])"
+      },
+      {
+        "Expression": "if([TransgenderOption]=\"Redundancy\";[RANK5];[RANK1])"
+      },
+      {
+        "Expression": "DisplayBib"
+      },
+      {
+        "Expression": "ucase([DisplayName])"
+      },
+      {
+        "Expression": "CONTEST.NAME"
+      },
+      {
+        "Expression": "SexMF"
+      },
+      {
+        "Expression": "Grade"
+      },
+      {
+        "Expression": "DisplayPoints"
+      },
+      {
+        "Expression": "DisplayLapTime(1)"
+      },
+      {
+        "Expression": "DisplayLapTime(2)"
+      },
+      {
+        "Expression": "DisplayLapTime(3)"
+      },
+      {
+        "Expression": "DisplayLapTime(4)"
+      },
+      {
+        "Expression": "DisplayLapTime(5)"
+      },
+      {
+        "Expression": "TIME20"
+      },
+      {
+        "Expression": "TimeOrStatus"
+      },
+      {
+        "Expression": "NumberOfLaps"
+      }
+    ],
+    "Orders": [
+      {
+        "Expression": "SchoolType",
+        "Grouping": 1
+      },
+      {
+        "Expression": "\"Division \"&[Division]",
+        "Grouping": 1
+      },
+      {
+        "Expression": "[CLUB] & \" - D\" & [Division]",
+        "Grouping": 1
+      },
+      {
+        "Expression": "DECIMALTIME12",
+        "Grouping": 0
+      },
+      {
+        "Expression": "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])",
+        "Grouping": 0
+      }
+    ]
+  },
+  "DataFields": [
+    "BIB",
+    "ID",
+    "choose([Division];[TS1.POSITION];[TS2.POSITION];[TS3.POSITION])",
+    "if([TransgenderOption]=\"Redundancy\";[RANK5];[RANK1])",
+    "DisplayBib",
+    "ucase([DisplayName])",
+    "CONTEST.NAME",
+    "SexMF",
+    "Grade",
+    "DisplayPoints",
+    "DisplayLapTime(1)",
+    "DisplayLapTime(2)",
+    "DisplayLapTime(3)",
+    "DisplayLapTime(4)",
+    "DisplayLapTime(5)",
+    "TIME20",
+    "TimeOrStatus",
+    "NumberOfLaps",
+    "iif([TS.SCORED]=1;\"B;\")"
+  ],
+  "data": {}
+}

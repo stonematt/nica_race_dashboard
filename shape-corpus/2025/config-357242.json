@@ -1,0 +1,46 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "357242",
+    "sourceShape": "2025"
+  },
+  "key": "«KEY»",
+  "eventname": "Race 1 - ORLeague - Old Oak Prologue",
+  "lists": [
+    {
+      "ID": "2A48B4",
+      "Name": "03 - Season Overall Results|Individual Results - Overall",
+      "Mode": ""
+    },
+    {
+      "ID": "E07F7C",
+      "Name": "02 - Result Lists|Individual Results - By Team",
+      "Mode": ""
+    },
+    {
+      "ID": "2A48B4",
+      "Name": "03 - Season Overall Results|Individual Results - Overall",
+      "Mode": "hidden"
+    },
+    {
+      "ID": "674D5B",
+      "Name": "02 - Result Lists|Team Results",
+      "Mode": "hidden"
+    },
+    {
+      "ID": "3A294C",
+      "Name": "02 - Result Lists|Team Results - Detailed",
+      "Mode": "hidden"
+    },
+    {
+      "ID": "E90EB9",
+      "Name": "03 - Season Overall Results|Team Results - Overall",
+      "Mode": "hidden"
+    },
+    {
+      "ID": "4F491D",
+      "Name": "10 - Prologue Results Lists|Prologue/TT Results ALL",
+      "Mode": ""
+    }
+  ]
+}

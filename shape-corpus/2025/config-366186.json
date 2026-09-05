@@ -1,0 +1,46 @@
+{
+  "shape": {
+    "season": 2025,
+    "eventId": "366186",
+    "sourceShape": "2025"
+  },
+  "key": "«KEY»",
+  "eventname": "Race 5 - ORLeague Butte, Scoot and Boogie - State Champs",
+  "lists": [
+    {
+      "ID": "4C8C1F",
+      "Name": "02 - Result Lists|Individual Results - ALL",
+      "Mode": ""
+    },
+    {
+      "ID": "E07F7C",
+      "Name": "02 - Result Lists|Individual Results - By Team",
+      "Mode": ""
+    },
+    {
+      "ID": "2A48B4",
+      "Name": "03 - Season Overall Results|Individual Results - Overall",
+      "Mode": ""
+    },
+    {
+      "ID": "674D5B",
+      "Name": "02 - Result Lists|Team Results",
+      "Mode": ""
+    },
+    {
+      "ID": "3A294C",
+      "Name": "02 - Result Lists|Team Results - Detailed",
+      "Mode": ""
+    },
+    {
+      "ID": "E90EB9",
+      "Name": "03 - Season Overall Results|Team Results - Overall",
+      "Mode": ""
+    },
+    {
+      "ID": "4F491D",
+      "Name": "10 - Prologue Results Lists|Prologue/TT Results ALL",
+      "Mode": "hidden"
+    }
+  ]
+}
