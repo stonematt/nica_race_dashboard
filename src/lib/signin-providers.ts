@@ -18,7 +18,9 @@ export interface AvailableProviders {
   /**
    * The development credentials shim. Two conditions, both required, because
    * either one alone has been enough to ship a second sign-in path by accident.
-   * It still runs the allowlist — it skips the mail server, not the gate.
+   * It skips the mail server AND the allowlist, so these two conditions are the
+   * whole of what keeps it off a server. The loopback bind in `pnpm dev` is the
+   * other half of that decision; see src/lib/admission.ts.
    */
   dev: boolean;
 }

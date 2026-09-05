@@ -16,10 +16,17 @@ import { config as middlewareConfig } from './middleware.ts';
 
 const repoRoot = path.join(import.meta.dirname, '..');
 
-/** next-auth types `authorized` loosely; the callback only ever reads auth.user. */
+/** next-auth types these loosely; each callback only reads what is named here. */
 const authorized = authConfig.callbacks.authorized as (arg: {
-  auth: { user?: { email?: string | null } } | null;
+  auth: { user?: { email?: string | null }; provider?: string } | null;
 }) => boolean;
+
+// Two-step cast: next-auth's session callback declares an adapter-shaped
+// argument this one never reads, so the narrow shape is not directly comparable.
+const session = authConfig.callbacks.session as unknown as (arg: {
+  session: { provider?: string };
+  token: Record<string, unknown>;
+}) => { provider?: string };
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -50,6 +57,65 @@ describe('authorized', () => {
   it('fails closed when the allowlist is empty', () => {
     vi.stubEnv('AUTH_ALLOWED_EMAILS', '');
     expect(authorized({ auth: { user: { email: 'coach@example.org' } } })).toBe(false);
+  });
+});
+
+describe('authorized, with the development shim switched on', () => {
+  /*
+   * These stub NODE_ENV deliberately. The suite above runs under
+   * NODE_ENV=test, which means the shim is off and its branch is never
+   * exercised — the tests passed for a reason unrelated to what they assert,
+   * and would have flipped if the vitest config ever set NODE_ENV=development.
+   */
+  const shimOn = () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('AUTH_DEV_LOGIN', '1');
+    vi.stubEnv('AUTH_ALLOWED_EMAILS', 'coach@example.org');
+  };
+
+  it('keeps a shim session alive instead of evicting it one request later', () => {
+    shimOn();
+    expect(authorized({ auth: { user: { email: 'anyone@example.test' }, provider: 'dev' } })).toBe(
+      true,
+    );
+  });
+
+  it('still allowlists a magic-link session in the same process', () => {
+    // The bug this locks down: branching on the shim being AVAILABLE rather
+    // than on the session having come through it dropped the allowlist for
+    // every session at once, revocation included.
+    shimOn();
+    expect(
+      authorized({ auth: { user: { email: 'anyone@example.test' }, provider: 'nodemailer' } }),
+    ).toBe(false);
+    expect(
+      authorized({ auth: { user: { email: 'coach@example.org' }, provider: 'nodemailer' } }),
+    ).toBe(true);
+  });
+
+  it('refuses a session with no provider claim and no listed address', () => {
+    // A token minted before the claim existed, or one stripped of it.
+    shimOn();
+    expect(authorized({ auth: { user: { email: 'anyone@example.test' } } })).toBe(false);
+  });
+
+  it('still refuses an anonymous request', () => {
+    shimOn();
+    expect(authorized({ auth: null })).toBe(false);
+    expect(authorized({ auth: { provider: 'dev' } })).toBe(false);
+  });
+});
+
+describe('the session callback', () => {
+  it('carries the provider claim through to the route gate', () => {
+    expect(session({ session: {}, token: { provider: 'dev' } }).provider).toBe('dev');
+  });
+
+  it('drops a claim that is not a string', () => {
+    // The token is decoded from a cookie, so its fields are unknown until
+    // checked. A non-string here must not reach the gate as one.
+    expect(session({ session: {}, token: { provider: 42 } }).provider).toBeUndefined();
+    expect(session({ session: {}, token: {} }).provider).toBeUndefined();
   });
 });
 
