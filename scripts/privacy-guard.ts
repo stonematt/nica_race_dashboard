@@ -96,13 +96,21 @@ function isRaceResultPayload(value: unknown): value is { DataFields: unknown[]; 
   );
 }
 
-/** Every row in a payload's `data`, whatever nesting the list happens to use. */
+/**
+ * Every row in a payload's `data`, whatever nesting the list happens to use.
+ *
+ * A group is either a list of rows (the base case: an array, returned as-is)
+ * or another object of groups one level deeper — a two-level-nested
+ * RaceResult payload groups by category and then by school, say. Recursing
+ * until an array turns up is what makes an inner group object count as MORE
+ * grouping rather than as a row in its own right; the earlier one-level
+ * `flatMap` treated a nested group object as a single opaque "row", which is
+ * what let a correctly stripped nested payload still report rows carried.
+ */
 function rowsOf(data: unknown): unknown[] {
   if (Array.isArray(data)) return data;
   if (typeof data === 'object' && data !== null) {
-    return Object.values(data as Record<string, unknown>).flatMap((group) =>
-      Array.isArray(group) ? group : [group],
-    );
+    return Object.values(data as Record<string, unknown>).flatMap(rowsOf);
   }
   return [];
 }

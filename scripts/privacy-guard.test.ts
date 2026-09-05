@@ -72,6 +72,37 @@ describe('the payload-rows rule', () => {
     expect(scan([{ path: 'shape/2025/overall.json', content }])).toEqual([]);
   });
 
+  it('passes a two-level-nested payload that kept the shape and dropped the rows', () => {
+    // A group grouped by group: category, then school, each stripped to [].
+    // rowsOf() has to recurse past the inner group objects rather than
+    // counting one of them as a single opaque "row".
+    const content = JSON.stringify({
+      DataFields: ['BIB', 'ID', 'CategoryRank', 'ucase([DisplayName])', 'CLUB', 'TotalTime'],
+      data: {
+        '#1_Varsity Boys': { '#1_North High': [], '#2_South High': [] },
+        '#2_Varsity Girls': { '#1_North High': [] },
+      },
+    });
+    expect(scan([{ path: 'shape/2025/overall.json', content }])).toEqual([]);
+  });
+
+  it('still refuses a two-level-nested payload that carries a real row', () => {
+    // The false-negative this closes: a single-level flatMap returned the
+    // inner group object itself as one "row", so a nested payload with rows
+    // still in it could read as carrying only 1 opaque row rather than N real
+    // ones — or, worse, an empty one could read as carrying 1.
+    const content = JSON.stringify({
+      DataFields: ['BIB', 'ID', 'CategoryRank', 'ucase([DisplayName])', 'CLUB', 'TotalTime'],
+      data: {
+        '#1_Varsity Boys': { '#1_North High': [A_ROW], '#2_South High': [] },
+      },
+    });
+    const finding = scan([{ path: 'shape/2025/overall.json', content }]).find(
+      (f) => f.rule === 'payload-rows',
+    );
+    expect(finding?.detail).toContain('1 row');
+  });
+
   it('never echoes the row it found', () => {
     // A failure message is written to a public CI log.
     const findings = scan([{ path: 'shape/overall.json', content: payload([A_ROW]) }]);
