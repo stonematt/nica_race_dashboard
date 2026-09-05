@@ -79,11 +79,29 @@ alone — the block is then **not** active, and you should chain
 **What the hook does not catch, and why that is fine.** It is a path check, so a payload
 whose bytes are _copied_ to some path outside `fixtures/` carries nothing for it to match
 on. Closing that needs a shape-level check — does this file look like a RaceResult
-payload — which is the CI privacy guard in
-[#28](https://github.com/stonematt/nica_race_dashboard/issues/28), running on every pull
-request. The hook is the local half and the guard is the remote half: the hook stops the
-commit, the guard catches a hook that was bypassed with `--no-verify` or never installed.
-Neither is the whole defence on its own, and neither is claimed to be.
+payload — and that is `scripts/privacy-guard.ts`, which CI runs on every pull request. The
+hook is the local half and the guard is the remote half: the hook stops the commit, the
+guard catches a hook that was bypassed with `--no-verify` or never installed. Neither is
+the whole defence on its own, and neither is claimed to be.
+
+The guard reads **tracked** files only, which is why the gitignored corpus in your working
+tree does not trip it, and applies three rules:
+
+1. Nothing under `fixtures/` or `data/` is ever tracked.
+2. A tracked RaceResult-shaped payload must carry no rows — the rule that guards the
+   committed shape corpus ([#31](https://github.com/stonematt/nica_race_dashboard/issues/31)),
+   so a stripper regression that starts emitting real rows fails the build instead of
+   publishing them.
+3. No tracked JSON or CSV holds a name-shaped value **where a person goes**: a positional
+   row (the shape RaceResult publishes people in), a field that names a person
+   (`displayName`, `lastName`, `rider` — but not a bare `name`, which clubs and squads
+   have too), or an object mapping keys to display names. Structure matters as much as
+   shape: `config/published-scoring-teams.json` is a flat list of school names, and a
+   guard that fails on the repo's own config is one that gets switched off. Pseudonyms
+   (`«RIDER-A»`) pass.
+
+Run it yourself with `pnpm privacy:check`. It never echoes the value it matched — a
+failure message is written to a public CI log.
 
 Anything derived from these payloads that _does_ get committed — schema notes, worked
 examples, test fixtures — must have rider names redacted first. The pattern used in the
