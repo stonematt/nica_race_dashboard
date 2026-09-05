@@ -32,6 +32,8 @@ export interface SnapshotList {
   decoded: boolean;
   /** True where the config marks the list hidden on the published page. */
   hidden: boolean;
+  /** Why a recognized list was not written. Null when it was. */
+  skippedBecause: string | null;
   /** `DataFields`, verbatim and in payload order. */
   expressions: readonly string[];
   rows: number;
@@ -39,8 +41,8 @@ export interface SnapshotList {
 
 export interface SnapshotFamily {
   name: string;
-  /** False for a family that is recognized but has no decoder yet. */
-  hasDecoder: boolean;
+  /** The table this family's rows land in. */
+  target: string;
   /** Every expression seen for this family anywhere in the archive, sorted. */
   expressions: string[];
   /** The resolved `list_id -> family` assignment, one entry per list. */
@@ -67,7 +69,7 @@ export function buildSnapshot(placed: readonly PlacedList[]): IngestSnapshot {
     if (!family) {
       family = {
         name: list.family.name,
-        hasDecoder: list.family.decoded,
+        target: list.family.target,
         expressions: [],
         lists: [],
       };
@@ -82,6 +84,7 @@ export function buildSnapshot(placed: readonly PlacedList[]): IngestSnapshot {
       variant: list.variant.name,
       decoded: list.decoded,
       hidden: list.hidden,
+      skippedBecause: list.skippedBecause,
       expressions: [...list.expressions],
       rows: list.rowCount,
     });

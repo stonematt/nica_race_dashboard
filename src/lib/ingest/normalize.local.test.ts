@@ -11,7 +11,7 @@
  * is *detected*; only real rows can prove the decode is *right*.
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../db/schema.ts';
 import { createTestDb, type TestDatabase } from '../db/testing.ts';
@@ -47,13 +47,13 @@ beforeAll(async () => {
   result = await normalize(db);
 }, 120_000);
 
-/** The archived payload of the list normalize actually decoded, per event. */
+/** The archived payload of the spine list normalize decoded, per event. */
 async function decodedPayloads() {
   const archived = await latestPayloads(db);
   const chosen = new Map<string, { DataFields: string[]; data: Record<string, string[][]> }>();
 
   for (const list of result.placed) {
-    if (!list.decoded) continue;
+    if (!list.decoded || list.family.target !== 'individual_result') continue;
     const row = archived.find(
       (candidate) => candidate.eventId === list.eventId && candidate.listId === list.listId,
     );
@@ -70,12 +70,30 @@ describe('the corpus decodes', () => {
     expect(result.events).toBe(9);
   });
 
-  it('decodes one flat individual list per event and skips the rest', () => {
-    // 51 lists: 9 decoded (one per event), 42 recognized and left alone — the
-    // 40 belonging to families #25 owns, plus the two hidden prologue
-    // re-renders that sit beside a published mass-start list.
-    expect(result.decodedLists).toBe(9);
-    expect(result.skipped).toBe(42);
+  it('decodes every list that feeds a table, and says why it skipped the rest', () => {
+    // 51 lists: 37 decoded, 14 recognized and deliberately not written — the
+    // two hidden prologue re-renders that lose the Mode tie-break, and the
+    // twelve season lists that are snapshots, the prologue's own list, or the
+    // degenerate State Champs copies rather than the season record.
+    expect(result.decodedLists).toBe(37);
+    expect(result.skipped).toBe(14);
+    expect(result.placed.filter((list) => !list.decoded && list.skippedBecause === null)).toEqual(
+      [],
+    );
+  });
+
+  it('populates every source-mirroring table', () => {
+    expect(result.rows).toEqual({
+      individual_result: TOTAL_ROWS,
+      // Every By-Team row across the season, high school only.
+      individual_result_by_team: 1338,
+      team_race_result: 234,
+      team_race_counter: 1564,
+      // 319 North + 322 South riders, from the two Race 4 events only.
+      season_individual_standing: 641,
+      season_individual_race_points: 2564,
+      season_team_standing: 48,
+    });
   });
 
   it('lands exactly the published row count at every event', async () => {
@@ -92,7 +110,7 @@ describe('the corpus decodes', () => {
   });
 
   it('lands the whole 2025 season and the 2026 opener', async () => {
-    expect(result.individualRows).toBe(TOTAL_ROWS);
+    expect(result.rows.individual_result ?? 0).toBe(TOTAL_ROWS);
 
     const rows = await db.select().from(schema.individualResult);
     expect(rows).toHaveLength(TOTAL_ROWS);
@@ -327,6 +345,205 @@ describe('categories', () => {
       .where(eq(schema.individualResult.eventId, event!.id));
 
     expect(new Set(rows.map((row) => row.conference))).toEqual(new Set(['North', 'South']));
+  });
+});
+
+describe('the By-Team sidecar', () => {
+  it('lands 1,336 of 1,338 rows on the spine, and keeps both orphans', async () => {
+    // An inner join here would silently delete two published results. The
+    // sidecar is its own table precisely so it cannot.
+    const sidecar = await db.select().from(schema.individualResultByTeam);
+    expect(sidecar).toHaveLength(1338);
+
+    const spine = new Set(
+      (await db.select().from(schema.individualResult)).map((row) => `${row.eventId}/${row.plate}`),
+    );
+    const matched = sidecar.filter((row) => spine.has(`${row.eventId}/${row.plate}`));
+
+    expect(matched).toHaveLength(1336);
+    expect(sidecar.length - matched.length).toBe(2);
+  });
+
+  it('contributes zero middle-school rows, and that is the finding', async () => {
+    // Every one of the 1,338 rows nests under a single `High School` node, so
+    // gender and grade are unavailable for every MS rider by construction. It
+    // is asserted rather than treated as missing data.
+    const ms = await db.execute(
+      sql.raw(`select count(*)::int as n
+               from individual_result_by_team bt
+               join individual_result ir
+                 on ir.event_id = bt.event_id and ir.plate = bt.plate
+               where ir.category_grade_band like 'MS%'`),
+    );
+
+    expect((ms.rows[0] as { n: number }).n).toBe(0);
+  });
+
+  it('normalizes the grade drift and leaves the six blanks unknown', async () => {
+    const grades = await db.select().from(schema.individualResultByTeam);
+    const distinct = new Set(grades.map((row) => row.grade));
+
+    expect([...distinct].sort()).toEqual(['10', '11', '12', '8', '9', null].sort());
+    expect(grades.filter((row) => row.grade === null)).toHaveLength(6);
+    // "9.0" was published at Race 1 and Race 2 South; nothing keeps that form.
+    expect([...distinct].some((grade) => grade?.includes('.'))).toBe(false);
+  });
+
+  it('records which riders counted toward the team score', async () => {
+    const rows = await db.select().from(schema.individualResultByTeam);
+
+    expect(rows.filter((row) => row.scored)).toHaveLength(848);
+    expect(rows.filter((row) => !row.scored)).toHaveLength(490);
+  });
+});
+
+describe('the team lists', () => {
+  it('carries the middle-school competition no other list publishes', async () => {
+    const counters = await db.select().from(schema.teamRaceCounter);
+    const ms = counters.filter((row) => row.level === 'Middle School');
+
+    expect(ms.length).toBeGreaterThan(500);
+    expect(new Set(ms.map((row) => row.scoringTeam)).size).toBe(25);
+    // ...and the per-race team list it would otherwise have to come from is
+    // high-school only at all eight events.
+    expect(new Set(counters.map((row) => row.level))).toEqual(
+      new Set(['High School', 'Middle School', null]),
+    );
+  });
+
+  it('splits the packed team node, penalty tail included', async () => {
+    const counters = await db.select().from(schema.teamRaceCounter);
+
+    expect(counters.every((row) => row.scoringTeam.length > 0)).toBe(true);
+    expect(counters.every((row) => row.teamPoints !== null)).toBe(true);
+    // No penalty was assessed anywhere in 2025 — the tail parses to 0, not null.
+    expect(new Set(counters.map((row) => row.teamPenaltyPoints))).toEqual(new Set([0]));
+  });
+
+  it('keeps the eighty unclassified State Champs rows', async () => {
+    const unclassified = (await db.select().from(schema.teamRaceCounter)).filter(
+      (row) => row.level === null,
+    );
+
+    expect(unclassified).toHaveLength(80);
+    expect(unclassified.every((row) => row.teamPoints === 0)).toBe(true);
+  });
+
+  it('stores an unassessed team penalty as null rather than zero', async () => {
+    const teams = await db.select().from(schema.teamRaceResult);
+
+    expect(teams).toHaveLength(234);
+    expect(teams.every((row) => row.penaltyPoints === null)).toBe(true);
+  });
+});
+
+describe('the season standings', () => {
+  it('reads only the Race 4 copies, and only for a conference', async () => {
+    const standings = await db.select().from(schema.seasonIndividualStanding);
+
+    expect(new Set(standings.map((row) => row.sourceEventId))).toEqual(
+      new Set(['363499', '363500']),
+    );
+    expect(new Set(standings.map((row) => row.conference))).toEqual(new Set(['North', 'South']));
+    // Every row publishes the real drop rule. A `1/1` would be the State
+    // Champs copy, which supersedes nothing.
+    expect(new Set(standings.map((row) => row.bestOf))).toEqual(new Set(['3/4']));
+  });
+
+  it('never writes the degenerate State Champs copies', async () => {
+    const teams = await db.select().from(schema.seasonTeamStanding);
+
+    expect(new Set(teams.map((row) => row.sourceEventId))).toEqual(new Set(['363499', '363500']));
+    expect(teams.every((row) => (row.seasonTotal ?? 0) > 0)).toBe(true);
+  });
+
+  it('leaves the South low score null and never repairs it with min()', async () => {
+    const standings = await db.select().from(schema.seasonIndividualStanding);
+    const south = standings.filter((row) => row.sourceEventId === '363500');
+    const north = standings.filter((row) => row.sourceEventId === '363499');
+
+    // 363500 omits the LOW SCORE column entirely; 363499 publishes it.
+    expect(south.every((row) => row.lowScore === null)).toBe(true);
+    expect(north.every((row) => row.lowScore !== null)).toBe(true);
+  });
+
+  it('goes long, and stores the Upgrade sentinel and the drop marker', async () => {
+    const points = await db.select().from(schema.seasonIndividualRacePoints);
+
+    expect(points).toHaveLength(2564);
+    expect(new Set(points.map((row) => row.roundOrdinal))).toEqual(new Set([1, 2, 3, 4]));
+    expect(points.filter((row) => row.isUpgrade).length).toBeGreaterThan(0);
+    expect(points.filter((row) => row.isUpgrade).every((row) => row.points === 'Upgrade')).toBe(
+      true,
+    );
+    expect(points.filter((row) => row.isDropped)).toHaveLength(552);
+  });
+
+  it('marks no drop where the South list omits the formatting column', async () => {
+    // 363500 drops LowScoreFormatting(1) entirely, so where RACE1 was the
+    // dropped race the list carries no marker. Recorded, never inferred.
+    const marked = await db.execute(
+      sql.raw(`select s.source_event_id, count(*) filter (where p.is_dropped)::int as marked
+               from season_individual_race_points p
+               join season_individual_standing s on s.id = p.standing_id
+               group by 1 order by 1`),
+    );
+
+    const rows = marked.rows as { source_event_id: string; marked: number }[];
+    expect(rows.find((row) => row.source_event_id === '363499')!.marked).toBe(319);
+    expect(rows.find((row) => row.source_event_id === '363500')!.marked).toBeLessThan(322);
+  });
+});
+
+describe('reconciliation with the per-race lists (issue #10)', () => {
+  it('agrees on every comparable per-race point value, with zero disagreements', async () => {
+    // The season list is the authority where they disagree. They do not.
+    const compared = await db.execute(
+      sql.raw(`select count(*)::int as n,
+                      count(*) filter (where p.points <> ir.points::text)::int as disagree
+               from season_individual_race_points p
+               join season_individual_standing s on s.id = p.standing_id
+               join round rd on rd.season_id = s.season_id and rd.ordinal = p.round_ordinal
+               join event e on e.round_id = rd.id
+                 and (e.conference = s.conference or e.conference is null)
+               join individual_result ir on ir.event_id = e.id and ir.plate = s.plate
+               where p.points ~ '^[0-9]+$' and ir.points is not null`),
+    );
+
+    const { n, disagree } = compared.rows[0] as { n: number; disagree: number };
+    expect(disagree).toBe(0);
+    expect(n).toBeGreaterThan(1500);
+  });
+
+  it('agrees on all 48 team season rows', async () => {
+    const compared = await db.execute(
+      sql.raw(`select count(*)::int as n,
+                      count(*) filter (where (st.race_points ->> rd.ordinal::text)::int
+                                             is distinct from tr.points)::int as disagree
+               from season_team_standing st
+               join round rd on rd.season_id = st.season_id
+               join event e on e.round_id = rd.id and e.conference = st.conference
+               join team_race_result tr
+                 on tr.event_id = e.id and tr.scoring_team = st.scoring_team
+               where st.race_points ? rd.ordinal::text`),
+    );
+
+    const { n, disagree } = compared.rows[0] as { n: number; disagree: number };
+    expect(disagree).toBe(0);
+    expect(n).toBeGreaterThan(100);
+
+    expect(await db.select().from(schema.seasonTeamStanding)).toHaveLength(48);
+  });
+
+  it('has SEASON equal to the sum of the published per-race scores', async () => {
+    // RACE 2 + RACE 3 + RACE 4, no drop. Asserted, never computed into the row.
+    const teams = await db.select().from(schema.seasonTeamStanding);
+
+    for (const team of teams) {
+      const races = Object.values(team.racePoints as Record<string, number>);
+      const sum = races.reduce((total, points) => total + points, 0);
+      expect(team.seasonTotal, `${team.conference} ${team.scoringTeam}`).toBe(sum);
+    }
   });
 });
 
