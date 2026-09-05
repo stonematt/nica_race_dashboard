@@ -130,6 +130,28 @@ describe('stripping a nested list payload', () => {
   });
 });
 
+describe('a payload whose shape the stripper cannot read', () => {
+  it('refuses a `Fields` that stopped being a list', () => {
+    // Stripping it to `[]` would commit a file claiming the list displayed no
+    // columns — drift published as fact.
+    const payload = { ...flatPayload, list: { ...flatPayload.list, Fields: 'gone' } };
+
+    expect(() => stripListPayload(IDENTITY, payload)).toThrow(/`list.Fields` is string/);
+  });
+
+  it('refuses an `Orders` that stopped being a list', () => {
+    const payload = { ...flatPayload, list: { ...flatPayload.list, Orders: 7 } };
+
+    expect(() => stripListPayload(IDENTITY, payload)).toThrow(/`list.Orders` is number/);
+  });
+
+  it('accepts a list that publishes neither, which the reader already allows', () => {
+    const payload = { ...flatPayload, list: { ListName: 'x', ListFooterText: '' } };
+
+    expect(stripListPayload(IDENTITY, payload).list.Fields).toEqual([]);
+  });
+});
+
 describe('stripping a config', () => {
   const config2025 = {
     key: 'a-short-lived-request-token',

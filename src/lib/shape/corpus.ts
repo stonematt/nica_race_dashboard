@@ -46,7 +46,7 @@
  * `stripGroupOrdinal()` exists to remove it.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SourceShape } from '../ingest/catalog.ts';
 import type { ListPayload } from '../ingest/rows.ts';
@@ -55,8 +55,21 @@ import { repoRoot } from '../fixtures.ts';
 /** Where the committed shape corpus lives, relative to the repo root. */
 export const SHAPE_CORPUS_DIRNAME = 'shape-corpus';
 
-/** Seasons the shape corpus carries. Same span as the real corpus. */
-export const SHAPE_SEASONS = ['2025', '2026'] as const;
+/**
+ * The season directories the corpus actually holds, ascending.
+ *
+ * Read off the disk rather than declared, so a season fetched into `fixtures/`
+ * and stripped needs no edit here to be found again. There is deliberately no
+ * `SHAPE_SEASONS` constant: `src/lib/fixtures.ts` already carries one for the
+ * real corpus, and a second copy that had to agree with it is exactly the kind
+ * of invariant that gets asserted in a docstring and then quietly stops holding.
+ */
+export function shapeSeasonDirs(root: string = shapeCorpusRoot()): string[] {
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
 
 /** A shape file that is missing, malformed, or carries something it must not. */
 export class ShapeCorpusError extends Error {
@@ -238,17 +251,18 @@ export function readShapeConfigFile(path: string): ShapeConfigFile {
  * fresh clone with no corpus on disk at all.
  */
 export function readShapeCorpus(root: string = shapeCorpusRoot()): ShapeEvent[] {
+  const seasons = shapeSeasonDirs(root);
+  if (seasons.length === 0) {
+    throw new ShapeCorpusError(
+      `${root} holds no season directories. The shape corpus is committed; regenerate ` +
+        'it with `node src/lib/shape/strip.ts` from a checkout that has fixtures/.',
+    );
+  }
+
   const events: ShapeEvent[] = [];
 
-  for (const seasonDir of SHAPE_SEASONS) {
+  for (const seasonDir of seasons) {
     const dir = join(root, seasonDir);
-    if (!existsSync(dir)) {
-      throw new ShapeCorpusError(
-        `${dir} is missing. The shape corpus is committed; regenerate it with ` +
-          '`node src/lib/shape/strip.ts` from a checkout that has fixtures/.',
-      );
-    }
-
     const names = readdirSync(dir).sort();
     const configs = names.filter((name) => name.startsWith('config-'));
 

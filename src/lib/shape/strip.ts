@@ -31,11 +31,10 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { format, resolveConfig } from 'prettier';
-import { readCatalog } from '../ingest/catalog.ts';
+import { readCatalog, type SourceShape } from '../ingest/catalog.ts';
 import { discoverCorpus, readEventRecords } from '../ingest/corpus.ts';
 import {
   REDACTED_KEY,
-  SHAPE_SEASONS,
   shapeConfigFileName,
   shapeCorpusRoot,
   shapeListFileName,
@@ -102,10 +101,30 @@ export function groupTreeOf(
   return tree;
 }
 
+/**
+ * A list the source publishes, or nothing where it publishes none.
+ *
+ * Absent is a shape the reader already handles — `readListLayout()` treats a
+ * missing `Fields` as an empty display list. *Present but not a list* is not:
+ * it means the source changed under us, and returning `[]` for it would commit
+ * a file claiming the list displayed no columns. Refuse instead.
+ */
+function arrayOr(where: string, field: string, value: unknown): unknown[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new ShapeCorpusError(
+      `${where}: \`${field}\` is ${value === null ? 'null' : typeof value}, not a list. ` +
+        'Stripping it to nothing would publish a shape the source never had.',
+    );
+  }
+  return value;
+}
+
 /** Every displayed expression, in payload order. Labels and styling go. */
-function fieldsOf(fields: unknown): ShapeField[] {
-  if (!Array.isArray(fields)) return [];
-  return fields.filter(isRecord).map((field) => ({ Expression: stringOr(field.Expression, '') }));
+function fieldsOf(where: string, fields: unknown): ShapeField[] {
+  return arrayOr(where, 'list.Fields', fields)
+    .filter(isRecord)
+    .map((field) => ({ Expression: stringOr(field.Expression, '') }));
 }
 
 /**
@@ -114,12 +133,13 @@ function fieldsOf(fields: unknown): ShapeField[] {
  * `Grouping` is what turns an order into a level of `data`, so the two together
  * are the source's own statement of the nesting this file records counts for.
  */
-function ordersOf(orders: unknown): ShapeOrder[] {
-  if (!Array.isArray(orders)) return [];
-  return orders.filter(isRecord).map((order) => ({
-    Expression: stringOr(order.Expression, ''),
-    Grouping: typeof order.Grouping === 'number' ? order.Grouping : 0,
-  }));
+function ordersOf(where: string, orders: unknown): ShapeOrder[] {
+  return arrayOr(where, 'list.Orders', orders)
+    .filter(isRecord)
+    .map((order) => ({
+      Expression: stringOr(order.Expression, ''),
+      Grouping: typeof order.Grouping === 'number' ? order.Grouping : 0,
+    }));
 }
 
 /** One published list payload, reduced to shape. */
@@ -127,12 +147,11 @@ export function stripListPayload(identity: ListIdentity, payload: unknown): Shap
   if (!isRecord(payload)) {
     throw new ShapeCorpusError(`event ${identity.eventId} list ${identity.listId}: not an object.`);
   }
+  const where = `event ${identity.eventId} list ${identity.listId}`;
   const list = isRecord(payload.list) ? payload.list : {};
   const dataFields = payload.DataFields;
   if (!Array.isArray(dataFields) || !dataFields.every((field) => typeof field === 'string')) {
-    throw new ShapeCorpusError(
-      `event ${identity.eventId} list ${identity.listId}: DataFields is not an array of strings.`,
-    );
+    throw new ShapeCorpusError(`${where}: DataFields is not an array of strings.`);
   }
 
   return {
@@ -146,12 +165,39 @@ export function stripListPayload(identity: ListIdentity, payload: unknown): Shap
     list: {
       ListName: stringOr(list.ListName, ''),
       ListFooterText: stringOr(list.ListFooterText, ''),
-      Fields: fieldsOf(list.Fields),
-      Orders: ordersOf(list.Orders),
+      Fields: fieldsOf(where, list.Fields),
+      Orders: ordersOf(where, list.Orders),
     },
     DataFields: [...dataFields],
     data: {},
   };
+}
+
+/**
+ * The raw catalog array, read from where the shape says it is.
+ *
+ * `readCatalog()` has already found it and refused a config that has neither
+ * key, so this walk cannot fail on a config the caller passed. It is still
+ * written as a guarded read rather than a cast: the coupling is a comment
+ * today, and a comment is not what should stand between a rewritten config and
+ * a `TypeError` three frames down.
+ */
+function catalogArrayOf(eventId: string, payload: unknown, shape: SourceShape): unknown[] {
+  const source = isRecord(payload) ? payload : {};
+  const raw =
+    shape === '2025'
+      ? source.lists
+      : isRecord(source.Tab) && isRecord(source.Tab.Config)
+        ? source.Tab.Config.Lists
+        : undefined;
+
+  if (!Array.isArray(raw)) {
+    throw new ShapeCorpusError(
+      `event ${eventId} config: no ${shape === '2025' ? '`lists`' : '`Tab.Config.Lists`'} array, ` +
+        `though it reads as the ${shape} API shape.`,
+    );
+  }
+  return raw;
 }
 
 /** The catalog entries a config advertises, duplicates and all. */
@@ -184,14 +230,7 @@ export function stripConfigPayload(
   // config that cannot be read at all — so a corpus file is never written from
   // a config the ingest layer would reject.
   const catalog = readCatalog(eventId, payload);
-  const source = payload as Record<string, unknown>;
-
-  const raw =
-    catalog.shape === '2025'
-      ? (source.lists as unknown[])
-      : (source.Tab as { Config: { Lists: unknown[] } }).Config.Lists;
-
-  const entries = catalogEntriesOf(raw);
+  const entries = catalogEntriesOf(catalogArrayOf(eventId, payload, catalog.shape));
   const base = {
     shape: { season, eventId, sourceShape: catalog.shape },
     // The real key is a short-lived request token. It says nothing about shape
@@ -223,7 +262,13 @@ export interface StrippedEvent {
 export function stripCorpus(): StrippedEvent[] {
   return discoverCorpus().map((event) => {
     const records = readEventRecords(event);
-    const configRecord = records.find((record) => record.listId === null)!;
+    const configRecord = records.find((record) => record.listId === null);
+    if (configRecord === undefined) {
+      throw new ShapeCorpusError(
+        `event ${event.eventId}: no config among its ${records.length} archived payload(s). ` +
+          'Without one a list has no list_id and the catalog cannot be read.',
+      );
+    }
     const catalog = readCatalog(event.eventId, configRecord.payload);
 
     return {
@@ -256,22 +301,21 @@ async function render(path: string, value: unknown): Promise<string> {
 /**
  * Write the shape corpus, replacing whatever was there.
  *
- * The season directories are cleared first so that a list the source stopped
- * publishing disappears from the corpus instead of lingering as a file nothing
- * regenerates.
+ * The whole root is cleared first so that a list — or a season — the source
+ * stopped publishing disappears from the corpus instead of lingering as a file
+ * nothing regenerates. The directories are made from the events being written
+ * rather than from a declared season list, so a 2027 season needs no edit here.
  */
 export async function writeShapeCorpus(
   events: readonly StrippedEvent[],
   root: string = shapeCorpusRoot(),
 ): Promise<string[]> {
-  for (const season of SHAPE_SEASONS) {
-    rmSync(join(root, season), { recursive: true, force: true });
-    mkdirSync(join(root, season), { recursive: true });
-  }
+  rmSync(root, { recursive: true, force: true });
 
   const written: string[] = [];
   for (const event of events) {
     const dir = join(root, String(event.season));
+    mkdirSync(dir, { recursive: true });
 
     const configPath = join(dir, shapeConfigFileName(event.eventId));
     writeFileSync(configPath, await render(configPath, event.config));

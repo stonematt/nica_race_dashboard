@@ -114,7 +114,8 @@ verifiable while carrying no identity.
 opener, reduced to shape: `DataFields` verbatim, every `Fields[].Expression`,
 every `Orders[].Grouping`, `ListName`, `ListFooterText`, the config's list
 catalog, and the `data` nesting with an integer row count where the rows were.
-60 files, 248K, and **not one row**. Issue
+One file per event config and one per published list — 248K today, and **not one
+row**. Issue
 [#31](https://github.com/stonematt/nica_race_dashboard/issues/31).
 
 It exists because drift detection is the part of ingest with no human in the
@@ -132,7 +133,10 @@ There is deliberately no package script: `bin/*.ts` already run this way under
 Node's native type stripping, and the command is what
 `src/lib/shape/type-stripping.test.ts` keeps working. `src/lib/shape/strip.local.test.ts`
 fails in the local lane when the committed corpus has gone stale against
-`fixtures/`.
+`fixtures/`. Nothing in the shape lane declares which seasons exist — the writer
+makes a directory per event it strips and the reader lists what is on disk — so
+a new season needs no edit here. `CORPUS_SEASONS` in `src/lib/fixtures.ts` still
+does, because that is what `discoverCorpus()` walks.
 
 Two things to know before editing the format:
 

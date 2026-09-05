@@ -137,6 +137,31 @@ describe('strict unknown-expression fatality', () => {
   });
 });
 
+describe('a column the source drops', () => {
+  it('is fatal when a family requires it', () => {
+    // See the required-fields block below: dropping `CLUB` refuses the list.
+    expect(INDIVIDUAL_FLAT.required).toContain('scoringTeam');
+  });
+
+  it('is fatal when it is part of the layout signature', () => {
+    // And the no-family block above: dropping `DisplayLapTime(1)` refuses it.
+    expect(INDIVIDUAL_FLAT.variants[0]!.signature).toContain('DisplayLapTime(1)');
+  });
+
+  it('is accepted when the family has declared it optional', () => {
+    // State Champs publishes the flat individual list 12 wide, without
+    // `DisplayPoints`. `points` is not required, so the ingest is right to take
+    // it — which is why `driftAgainst()` reports removals nowhere: the removals
+    // that matter have already been refused by the two rules above.
+    const stateChamps = listById('366186', '4C8C1F');
+    const layout = layoutOf(stateChamps);
+
+    expect(stateChamps.DataFields).not.toContain('DisplayPoints');
+    expect(INDIVIDUAL_FLAT.required).not.toContain('points');
+    expect(resolveFamilyFields(whereOf(stateChamps), layout, INDIVIDUAL_FLAT).points).toBeNull();
+  });
+});
+
 describe('required fields', () => {
   it('refuses a layout where a required field resolves to no column', () => {
     // `CLUB` is the NICA-reported scoring team. Without it a row cannot be

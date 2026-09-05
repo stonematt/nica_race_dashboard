@@ -19,11 +19,11 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { scan, trackedFiles } from '../../../scripts/privacy-guard.ts';
 import { repoRoot } from '../fixtures.ts';
-import { SHAPE_SEASONS, shapeCorpusRoot } from './corpus.ts';
+import { readShapeCorpus, shapeCorpusRoot, shapeSeasonDirs } from './corpus.ts';
 
 /** Every committed shape file, as the guard would be handed it. */
 function shapeFiles(): { path: string; content: string }[] {
-  return SHAPE_SEASONS.flatMap((season) => {
+  return shapeSeasonDirs().flatMap((season) => {
     const dir = join(shapeCorpusRoot(), season);
     return readdirSync(dir).map((name) => ({
       path: relative(repoRoot(), join(dir, name)),
@@ -47,8 +47,11 @@ const A_ROW = ['214', '9', '1', 'JORDAN RIVERS', 'Some Composite', '00:41:12.3']
 describe('the committed shape corpus', () => {
   const files = shapeFiles();
 
-  it('is 60 files across two seasons', () => {
-    expect(files).toHaveLength(60);
+  it('is one file per event config and one per published list', () => {
+    const events = readShapeCorpus();
+    const lists = events.reduce((total, event) => total + event.lists.length, 0);
+
+    expect(files).toHaveLength(events.length + lists);
   });
 
   it('passes the privacy guard', () => {

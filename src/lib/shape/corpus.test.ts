@@ -14,8 +14,8 @@ import { countRows, dataDepth } from '../ingest/rows.ts';
 import {
   hydrate,
   readShapeCorpus,
-  SHAPE_SEASONS,
   shapeCorpusRoot,
+  shapeSeasonDirs,
   type ShapeListFile,
 } from './corpus.ts';
 import { familyOf } from './place.ts';
@@ -25,7 +25,7 @@ const lists = events.flatMap((event) => event.lists);
 
 /** Every JSON file in the committed corpus, parsed. */
 function everyFile(): { path: string; parsed: unknown }[] {
-  return SHAPE_SEASONS.flatMap((season) => {
+  return shapeSeasonDirs().flatMap((season) => {
     const dir = join(shapeCorpusRoot(), season);
     return readdirSync(dir).map((name) => ({
       path: `${season}/${name}`,
@@ -169,6 +169,32 @@ describe('the shape corpus carries no row values', () => {
 
   it('redacted the config request token', () => {
     for (const event of events) expect(event.config.key).toBe('«KEY»');
+  });
+
+  it('publishes no plate-shaped string anywhere in any file', () => {
+    // A plate is the rider handle — a bare one-to-four-digit number, and the
+    // one identifier that survives redacting a name. There is not a single
+    // string of that shape in the corpus: the columns are expressions, the
+    // labels are synthetic, the counts are numbers rather than strings, and
+    // the event and list IDs are six digits and hex.
+    const strings = (value: unknown): string[] => {
+      if (typeof value === 'string') return [value];
+      if (typeof value !== 'object' || value === null) return [];
+      return Object.values(value as Record<string, unknown>).flatMap(strings);
+    };
+
+    for (const { path, parsed } of everyFile()) {
+      // The `shape` block is the corpus's own bookkeeping, not payload — it
+      // holds the season, the event and list IDs and the API-shape
+      // discriminator, and `sourceShape` is the literal string "2025", which a
+      // plate rule cannot tell from a plate. Its contents are pinned by the
+      // structural assertions above instead.
+      const { shape: _bookkeeping, ...published } = parsed as Record<string, unknown>;
+      const plates = strings(published).filter((value) => /^\d{1,4}$/.test(value));
+      expect(`${path}: ${plates.length} plate-shaped string(s)`).toBe(
+        `${path}: 0 plate-shaped string(s)`,
+      );
+    }
   });
 });
 

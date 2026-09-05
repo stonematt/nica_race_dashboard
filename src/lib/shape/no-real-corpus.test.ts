@@ -8,21 +8,30 @@
  * and the whole suite quietly starts depending on minors' race results being on
  * the machine.
  *
- * Two halves. The static half names the doors into `fixtures/` and checks that
- * nothing in this lane opens one — `strip.ts` excepted, which is the writer and
- * runs on a developer's machine with a human present. The runtime half reads
- * the corpus out of a directory that is demonstrably not `fixtures/`.
+ * Two halves, because neither is sufficient alone. The **runtime** half spawns
+ * a Node process in which every filesystem read under `fixtures/` throws, and
+ * runs the whole detection flow inside it — read the corpus, place every list,
+ * build both snapshots, diff them. It proves the property rather than a proxy
+ * for it, and it proves the trap bites before it claims anything. The
+ * **static** half names the known doors into `fixtures/` and checks that
+ * nothing in this lane imports one, so a regression is caught at the line that
+ * introduces it rather than only at the read.
+ *
+ * `strip.ts` is excepted from the static half: it is the writer, and it runs on
+ * a developer's machine with a human present.
  *
  * Default lane.
  */
 
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
 import { CORPUS_DIRNAME } from '../fixtures.ts';
-import { readShapeCorpus, shapeCorpusRoot, SHAPE_SEASONS } from './corpus.ts';
-import { listsOf, snapshotOf } from './snapshot.ts';
+import { shapeCorpusRoot } from './corpus.ts';
+
+const run = promisify(execFile);
 
 /**
  * Modules exempt from the scan: the two that write the corpus and run on a
@@ -69,21 +78,53 @@ describe('nothing in the detection lane can reach the real corpus', () => {
   });
 });
 
-describe('the suite runs against a shape corpus anywhere on disk', () => {
-  const elsewhere = mkdtempSync(join(tmpdir(), 'shape-corpus-'));
-
-  afterAll(() => rmSync(elsewhere, { recursive: true, force: true }));
-
-  it('reads and snapshots a copy that is nowhere near the checkout', () => {
-    // Proof by construction that the reader takes its root as a parameter and
-    // consults nothing else — no environment variable, no cwd, no fixtures/.
-    for (const season of SHAPE_SEASONS) {
-      cpSync(join(shapeCorpusRoot(), season), join(elsewhere, season), { recursive: true });
+describe('the detection flow, run where the real corpus cannot be reached', () => {
+  /**
+   * Every read under `fixtures/` throws, then the whole flow runs.
+   *
+   * `src/lib/fixtures.ts` is deliberately not caught by the matcher — it is a
+   * module, not the corpus, and the modules under test are allowed to import
+   * `repoRoot` from it.
+   */
+  const script = `
+    import fs from 'node:fs';
+    const forbidden = (p) =>
+      String(p).includes('/${CORPUS_DIRNAME}/') || String(p).endsWith('/${CORPUS_DIRNAME}');
+    for (const name of ['readFileSync', 'readdirSync', 'existsSync', 'openSync', 'statSync',
+                        'opendirSync', 'createReadStream']) {
+      const original = fs[name];
+      fs[name] = (p, ...rest) => {
+        if (forbidden(p)) throw new Error('REACHED THE REAL CORPUS: ' + p);
+        return original(p, ...rest);
+      };
     }
 
-    const events = readShapeCorpus(elsewhere);
+    // The trap has to bite, or the rest of this proves nothing.
+    try {
+      fs.readdirSync(process.cwd() + '/../../../${CORPUS_DIRNAME}');
+      console.log('trap did not bite');
+    } catch (error) {
+      if (!String(error.message).startsWith('REACHED')) throw error;
+    }
 
-    expect(events).toHaveLength(9);
-    expect(snapshotOf(listsOf(events)).families.length).toBeGreaterThan(0);
+    const { readShapeCorpus } = await import('./corpus.ts');
+    const { snapshotOf } = await import('./snapshot.ts');
+    const { driftAgainst } = await import('./drift.ts');
+
+    const events = readShapeCorpus();
+    const lists = (season) =>
+      events.filter((event) => event.season === season).flatMap((event) => event.lists);
+    const drift = driftAgainst(snapshotOf(lists(2025)), snapshotOf(lists(2026)));
+
+    console.log(JSON.stringify({ events: events.length, drift: drift.length }));
+  `;
+
+  it('reads the shape corpus, places every list and reports the 2026 drift', async () => {
+    const { stdout } = await run(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: import.meta.dirname,
+    });
+
+    expect(stdout).not.toContain('trap did not bite');
+    expect(JSON.parse(stdout.trim())).toEqual({ events: 9, drift: 9 });
   });
 });

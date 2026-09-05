@@ -15,6 +15,18 @@
  * classified before an ingest can be trusted, and it is what a new season
  * produces.
  *
+ * **A column the source drops is therefore not reported here, and that is not a
+ * gap.** A removal that matters is already fatal, earlier and louder, at
+ * placement: drop a column from a variant's signature and `assignFamily()`
+ * refuses the list outright; drop one a family requires and
+ * `resolveFamilyFields()` refuses to write it. Drop anything else and the
+ * family has declared, in `src/lib/ingest/families.ts`, that it is optional —
+ * which is a statement about the source, not an oversight. State Champs
+ * publishes the flat individual list without `DisplayPoints` and the ingest is
+ * correct to accept it, because `points` is not a required field. Reporting
+ * that as drift would mean reporting every narrower list in the corpus, and a
+ * check that fires on eight of nine events is one nobody reads.
+ *
  * The comparison deliberately ignores `decoded`, `skippedBecause` and row
  * counts. The first two are decode-pass outcomes the shape lane cannot know
  * (see `src/lib/shape/place.ts`); the third changes every event by design and
