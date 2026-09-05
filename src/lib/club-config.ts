@@ -13,7 +13,7 @@
  *     riders are minors, so a rider in `config/club-seed.json` is a stable key
  *     and a plate mapping and nothing that names anyone. Display names arrive
  *     from a separate key -> name map, and that map is kept *outside* the
- *     working tree, at `~/.local/share/nica_race_dashboard/config/`.
+ *     working tree, at `~/.local/share/bike_race_results/config/`.
  *
  *     Outside rather than in-tree-and-ignored, which is where the payload
  *     corpus now lives (docs/fixtures.md). The corpus bought its way in with a
@@ -70,7 +70,7 @@ export const defaultRiderNamesPath = path.join(
   os.homedir(),
   '.local',
   'share',
-  'nica_race_dashboard',
+  'bike_race_results',
   'config',
   'rider-names.json',
 );

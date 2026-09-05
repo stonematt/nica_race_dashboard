@@ -101,8 +101,8 @@ describe('createPoliteClient', () => {
       USER_AGENT,
     ]);
     // A UA that says who this is and where to complain, not a browser lie.
-    expect(USER_AGENT).toContain('nica_race_dashboard');
-    expect(USER_AGENT).toContain('https://github.com/stonematt/nica_race_dashboard');
+    expect(USER_AGENT).toContain('bike_race_results');
+    expect(USER_AGENT).toContain('https://github.com/stonematt/bike_race_results');
   });
 
   it('runs requests one at a time, even when the caller does not wait', async () => {

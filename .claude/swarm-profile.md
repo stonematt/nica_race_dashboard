@@ -1,11 +1,11 @@
-# Swarm profile — nica_race_dashboard
+# Swarm profile — bike_race_results
 
 Filled 2026-09-04. Re-run the gates and the blast-radius probe every swarm; those two rows are
 the run's, not the repo's. Everything else is the repo's until the repo changes.
 
 ---
 
-**Repo** `stonematt/nica_race_dashboard` · root `/Users/mstone/src/github.com/scd/nica_race_dashboard` · base branch `dev`
+**Repo** `stonematt/bike_race_results` · root `/Users/mstone/src/github.com/scd/bike_race_results` · base branch `dev`
 
 The release branch is `main`. Feature branches cut from `dev` and PR into `dev`. Nothing in a
 swarm ever touches `main`.
@@ -42,8 +42,8 @@ Beat or match those counts. A test count that went *down* is a deleted test, not
 
 ## Blast radius
 
-Probes planted at `$TMPDIR`, `~/.local/share/nica_race_dashboard/`,
-`~/.local/share/nica_race_dashboard/fixtures/`, `~/.config/`, the repo root and `.pglite/`;
+Probes planted at `$TMPDIR`, `~/.local/share/bike_race_results/`,
+`~/.local/share/bike_race_results/fixtures/`, `~/.config/`, the repo root and `.pglite/`;
 the full gate set run at `fb8a51f`.
 
 **All six markers survived.** The gate set is fully sandboxed — it writes nothing outside the
@@ -52,7 +52,7 @@ worktree. PGlite in the test suite is in-memory.
 **The line your new tests hold:** a test gets its database from `createTestDb()` in
 `src/lib/db/testing.ts` — never `createDb()` from `src/lib/db/index.ts`, which resolves a real
 URL and can land a database on disk at `.pglite/`. A test never writes anywhere under
-`~/.local/share/nica_race_dashboard/`. Break either and the next swarm's probe dies.
+`~/.local/share/bike_race_results/`. Break either and the next swarm's probe dies.
 
 ## Leave unrun
 
@@ -62,7 +62,7 @@ URL and can land a database on disk at `.pglite/`. A test never writes anywhere 
 | `pnpm db:migrate` / `bin/migrate.ts` | Writes to whatever `DATABASE_URL` resolves to, and can create `.pglite/` on disk. |
 | `pnpm seed` / `bin/seed.ts` | Same database, plus it reads the real allowlist. |
 | `pnpm db:studio` | Interactive. It will hang an unattended lane until someone kills it. |
-| any write under `~/.local/share/nica_race_dashboard/` | **The fixture corpus is the only copy.** 1.7M, 64 payloads, fetched once on purpose and slowly. Read it. Copy from it. Never move, never delete, never rewrite. The ticket that brings it in-tree copies and leaves the original standing. |
+| any write under `~/.local/share/bike_race_results/` | **The fixture corpus is the only copy.** 1.7M, 64 payloads, fetched once on purpose and slowly. Read it. Copy from it. Never move, never delete, never rewrite. The ticket that brings it in-tree copies and leaves the original standing. |
 
 `pnpm brand:check` is safe but is not a gate — it reads a private sibling repo and exits 0 when
 it is absent.
@@ -120,7 +120,7 @@ Observed by two lanes, 2026-09-04/05. From a linked worktree, with `dev` checked
 main tree:
 
 ```
-fatal: 'dev' is already used by worktree at .../nica_race_dashboard
+fatal: 'dev' is already used by worktree at .../bike_race_results
 ```
 
 **The merge itself lands** — it is a server-side API call. Only gh's local checkout and its

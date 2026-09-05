@@ -60,7 +60,7 @@ describe('the tracked-corpus-path rule', () => {
     // `fixtures`, no trailing slash, same as the case above. What the symlink
     // resolves to is irrelevant to this rule; the path itself is the finding.
     expect(
-      scan([{ path: 'fixtures', content: '~/.local/share/nica_race_dashboard/fixtures' }]).map(
+      scan([{ path: 'fixtures', content: '~/.local/share/bike_race_results/fixtures' }]).map(
         (f) => f.rule,
       ),
     ).toEqual(['tracked-corpus-path']);
@@ -249,7 +249,7 @@ describe('the name rules', () => {
 
   it('passes the ordinary JSON a repo is full of', () => {
     const content = JSON.stringify({
-      name: 'nica-race-dashboard',
+      name: 'bike-race-results',
       license: 'MIT',
       scripts: { test: 'vitest run' },
     });

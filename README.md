@@ -1,4 +1,4 @@
-# nica_race_dashboard
+# bike_race_results
 
 A race dashboard for the **Salem Composite Descenders**, an Oregon Interscholastic Cycling League (NICA) composite team.
 
@@ -133,7 +133,7 @@ minors' names from a live API. The workflow says so at the top of the file, and
 
 Branching runs feature → `dev` → `main`. Feature branches (`feat/*`, `fix/*`) cut from `dev` and PR back into it; `dev` PRs into `main` for a release. Nothing lands on `main` directly.
 
-Work is tracked as GitHub issues on `stonematt/nica_race_dashboard`. The triage vocabulary and the agent conventions are documented in `docs/agents/`.
+Work is tracked as GitHub issues on `stonematt/bike_race_results`. The triage vocabulary and the agent conventions are documented in `docs/agents/`.
 
 Read [`docs/brand.md`](docs/brand.md) before building any UI. It holds the rules that constrain code — ink on orange and never white, orange as a highlight rather than a field, navy ground for the banner — plus the fonts, the asset policy, and how to reskin the app for another club. The tokens themselves are vendored into the `@theme` block of `src/app/globals.css` and covered by unit tests, so everything you need is in this repo; `pnpm brand:check` diffs the copy against the upstream design system for whoever has it, and exits 0 for everyone who doesn't.
 

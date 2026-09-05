@@ -1,10 +1,10 @@
-# nica_race_dashboard
+# bike_race_results
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues live as GitHub issues on `stonematt/nica_race_dashboard`, via the `gh` CLI. External PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues on `stonematt/bike_race_results`, via the `gh` CLI. External PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

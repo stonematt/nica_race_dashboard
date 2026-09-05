@@ -2,7 +2,7 @@
  * Where the RaceResult fixture corpus lives, and how to address a payload
  * inside it.
  *
- * The corpus used to sit at `~/.local/share/nica_race_dashboard/fixtures/`,
+ * The corpus used to sit at `~/.local/share/bike_race_results/fixtures/`,
  * outside the working tree, so that no git command could commit minors' names
  * onto a public repo. Issue #30 moved it in-tree at `fixtures/` and replaced
  * that physical guarantee with a mechanical one: `.gitignore` plus the

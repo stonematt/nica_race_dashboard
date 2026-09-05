@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues on **`stonematt/nica_race_dashboard`**. Use the `gh` CLI for all operations.
+Issues and PRDs for this repo live as GitHub issues on **`stonematt/bike_race_results`**. Use the `gh` CLI for all operations.
 
 ## Conventions
 
