@@ -65,7 +65,7 @@ Next loads `.env.local` itself; the `bin/` scripts do not. They run under plain 
 
 `AUTH_ALLOWED_EMAILS` is a comma-separated, case-insensitive list, and on any deployment it is the single gate. An empty list admits nobody; the failure mode is closed.
 
-One function decides admission — `admits()` in `src/lib/admission.ts` — and three places ask it: the `signIn` callback, the `authorized` callback on every request (so striking an address evicts that session immediately, even under JWT), and `seedAdmin`.
+The list is checked in three places: the `signIn` callback, the `authorized` callback on every request (so striking an address evicts that session immediately, even under JWT), and `seedAdmin`. The first two ask one function — `admits()` in `src/lib/admission.ts` — which is where the single exception below lives. `seedAdmin` calls `isAllowed()` straight, and has no exception at all: there is no way to seed an unlisted address.
 
 Two providers exist. A Nodemailer magic link, which loads only when `AUTH_EMAIL_SERVER` is set, is the only production path, and it runs the allowlist. A development credentials shim, which loads only when `NODE_ENV=development` **and** `AUTH_DEV_LOGIN=1`, is the one bypass: it signs in **any** address you type, with no mail server, no allowlist, and nothing proving you control it.
 
