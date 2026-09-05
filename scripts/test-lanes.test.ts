@@ -23,7 +23,13 @@ const SENTINEL = 'src/lib/fixtures.local.test.ts';
 function collect(config: string): string[] {
   const run = spawnSync(
     process.execPath,
-    [join(repoRoot(), 'node_modules', 'vitest', 'vitest.mjs'), 'list', '--filesOnly', '--config', config],
+    [
+      join(repoRoot(), 'node_modules', 'vitest', 'vitest.mjs'),
+      'list',
+      '--filesOnly',
+      '--config',
+      config,
+    ],
     { cwd: repoRoot(), encoding: 'utf8' },
   );
   expect(run.status, run.stderr).toBe(0);

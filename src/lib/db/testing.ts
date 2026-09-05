@@ -4,8 +4,9 @@
  * Every suite that needs real Postgres gets a fresh in-memory PGlite, migrated
  * to the current schema — tables and views both. In-memory means no cleanup, no
  * shared state between suites, and no fixture files on disk, which matters here
- * because the fixture corpus is minors' race results and stays out of the tree
- * (see docs/fixtures.md).
+ * because the fixture corpus is minors' race results: it sits in the tree at
+ * `fixtures/` but is never committed, and only the local-only test lane reads
+ * it (see docs/fixtures.md).
  *
  * Migrations resolve relative to this file rather than the working directory,
  * so a suite runs the same from the repo root, from an editor, or from CI.

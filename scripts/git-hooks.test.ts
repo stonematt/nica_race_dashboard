@@ -206,7 +206,11 @@ describe('hook installation', () => {
     created.push(dir);
     git(dir, 'init', '--quiet', '-b', 'main');
 
-    const run = spawnSync('node', [INSTALLER], { cwd: dir, encoding: 'utf8', env: ISOLATED_GIT_ENV });
+    const run = spawnSync('node', [INSTALLER], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: ISOLATED_GIT_ENV,
+    });
 
     expect(run.status).toBe(0);
     expect(git(dir, 'config', '--get', 'core.hooksPath').stdout.trim()).toBe(HOOKS_PATH);
@@ -218,7 +222,11 @@ describe('hook installation', () => {
     git(dir, 'init', '--quiet', '-b', 'main');
     git(dir, 'config', 'core.hooksPath', '.husky');
 
-    const run = spawnSync('node', [INSTALLER], { cwd: dir, encoding: 'utf8', env: ISOLATED_GIT_ENV });
+    const run = spawnSync('node', [INSTALLER], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: ISOLATED_GIT_ENV,
+    });
 
     expect(run.status).toBe(0);
     expect(git(dir, 'config', '--get', 'core.hooksPath').stdout.trim()).toBe('.husky');
@@ -229,7 +237,11 @@ describe('hook installation', () => {
     const dir = await mkdtemp(join(tmpdir(), 'nica-install-'));
     created.push(dir);
 
-    const run = spawnSync('node', [INSTALLER], { cwd: dir, encoding: 'utf8', env: ISOLATED_GIT_ENV });
+    const run = spawnSync('node', [INSTALLER], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: ISOLATED_GIT_ENV,
+    });
 
     expect(run.status).toBe(0);
   });

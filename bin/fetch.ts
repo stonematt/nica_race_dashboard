@@ -17,8 +17,9 @@
  *   3. Be polite. This is a volunteer-run nonprofit's timing vendor: serial
  *      requests, a real User-Agent, ~3s spacing, back off on any non-200.
  *
- * The 2025 season and the 2026 opener are ALREADY FETCHED and live outside this
- * repo (see docs/fixtures.md). Do not re-fetch them.
+ * The 2025 season and the 2026 opener are ALREADY FETCHED and live in the tree
+ * at `fixtures/`, gitignored and blocked at pre-commit (see docs/fixtures.md).
+ * Resolve them with src/lib/fixtures.ts. Do not re-fetch them.
  */
 
 console.log('bin/fetch.ts — stub. Implementation is issue #15, blocked on #12.');
