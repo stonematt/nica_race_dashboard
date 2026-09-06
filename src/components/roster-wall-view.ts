@@ -35,6 +35,26 @@ export function roundHref(seasonYear: number, roundOrdinal: number): string {
 }
 
 /**
+ * The fragment a crossing link's URL ends in, and the `id` the Category page
+ * gives her own row so the browser lands on it natively — no client script
+ * required for "visible on load" to hold at either end of the corpus (2
+ * riders, 80 riders). `src/components/category-view.ts` reads this same
+ * constant so the two sides of the crossing never drift apart.
+ */
+export const CROSSING_ANCHOR = 'her';
+
+/**
+ * `/<year>/round/<ordinal>/category/<riderId>#her` — the crossing (ADR-0002):
+ * the single link out of the club tree, from a wall cell that started to her
+ * own Category field at that Round. Only ever built for a `positioned` or
+ * `started-not-positioned` cell; a `did-not-start` cell opens no Category
+ * (`src/lib/db/category-query.ts` returns null for a non-start).
+ */
+export function categoryHref(seasonYear: number, roundOrdinal: number, riderId: number): string {
+  return `/${seasonYear}/round/${roundOrdinal}/category/${riderId}#${CROSSING_ANCHOR}`;
+}
+
+/**
  * The wall's columns, in `roundOrdinal` ascending order — owned here rather
  * than trusted from the caller, the same "own the order" instinct
  * `buildFieldStrip` and `buildRosterWall` both state in their own headers: an

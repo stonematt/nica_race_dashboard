@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import type { RosterWallCell, RosterWallRound, RosterWallRow } from '@/lib/roster-wall.ts';
-import { buildRosterWallColumns, cellMark, describeCell, pctBackText } from './roster-wall-view.ts';
+import {
+  buildRosterWallColumns,
+  categoryHref,
+  cellMark,
+  describeCell,
+  pctBackText,
+} from './roster-wall-view.ts';
 
 /**
  * The Roster Wall: rows are Riders on the Squad, columns are Rounds of the
@@ -22,9 +28,17 @@ import { buildRosterWallColumns, cellMark, describeCell, pctBackText } from './r
  * The three states are told apart by more than colour: each has its own
  * shape (numeral vs. chip vs. nothing) and its own words, so a coach who
  * cannot see colour still reads three different things.
+ *
+ * **The crossing** (ADR-0002, issue #92): a `positioned` or
+ * `started-not-positioned` cell — any Round she started — links to her own
+ * Category field at that Round (`categoryHref`, `src/components/roster-wall-view.ts`).
+ * A `did-not-start` cell links nowhere; there is no Category to open for a
+ * non-start. This is the one kind of link on the page that leaves the club
+ * tree, so `Crossing` gives it its own mark rather than the plain underline
+ * a round header gets.
  */
 export type RosterWallProps = {
-  /** The season the wall is scoped to — only used to build a column's link. */
+  /** The season the wall is scoped to — used to build a column's link and a crossing's. */
   seasonYear: number;
   rounds: readonly RosterWallRound[];
   rows: readonly RosterWallRow[];
@@ -67,11 +81,48 @@ function PositionedCell({ cell }: { cell: Extract<RosterWallCell, { state: 'posi
   );
 }
 
-function Cell({ cell }: { cell: RosterWallCell }) {
+/**
+ * The crossing (ADR-0002): the one link out of the club tree, from a cell
+ * that started to her own Category field at that Round. Everywhere else on
+ * this page is a link within the club tree (a round header to the Round
+ * page); this is the single kind of link that leaves it, so it carries its
+ * own small "↗ category" mark rather than the plain underline a round header
+ * gets — a shape difference, not just a colour, and named in words for a
+ * screen reader too.
+ */
+function Crossing({
+  href,
+  cell,
+  children,
+}: {
+  href: string;
+  cell: RosterWallCell;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="focus-visible:outline-accent block rounded outline-offset-2 focus-visible:outline-2"
+    >
+      {children}
+      <span
+        aria-hidden="true"
+        className="text-accent mt-0.5 block text-[9px] font-bold tracking-wide"
+      >
+        ↗ category
+      </span>
+      <span className="sr-only">{`${describeCell(cell)}. Open her Category at this round.`}</span>
+    </Link>
+  );
+}
+
+function Cell({ cell, href }: { cell: RosterWallCell; href: string | null }) {
   if (cell.state === 'did-not-start') {
     // Visibly empty, on purpose: a non-start must not read as a bad result,
     // so there is no chip, no glyph and no colour here at all — only the
-    // fact, for a reader who cannot see that the cell is blank.
+    // fact, for a reader who cannot see that the cell is blank. It also
+    // never links: there is no Category to open for a Round she did not
+    // start.
     return (
       <td className="border-border border p-2 text-center align-middle">
         <span className="sr-only">{describeCell(cell)}</span>
@@ -79,12 +130,21 @@ function Cell({ cell }: { cell: RosterWallCell }) {
     );
   }
 
+  const mark =
+    cell.state === 'positioned' ? (
+      <PositionedCell cell={cell} />
+    ) : (
+      <StartedNotPositionedCell cell={cell} />
+    );
+
   return (
     <td className="border-border border p-2 text-center align-middle">
-      {cell.state === 'positioned' ? (
-        <PositionedCell cell={cell} />
+      {href ? (
+        <Crossing href={href} cell={cell}>
+          {mark}
+        </Crossing>
       ) : (
-        <StartedNotPositionedCell cell={cell} />
+        mark
       )}
     </td>
   );
@@ -146,9 +206,14 @@ export function RosterWall({ seasonYear, rounds, rows }: RosterWallProps) {
               >
                 {row.rider.riderName}
               </th>
-              {row.cells.map((cell, i) => (
-                <Cell key={columns[i]?.roundOrdinal ?? i} cell={cell} />
-              ))}
+              {row.cells.map((cell, i) => {
+                const roundOrdinal = columns[i]?.roundOrdinal;
+                const href =
+                  cell.state === 'did-not-start' || roundOrdinal === undefined
+                    ? null
+                    : categoryHref(seasonYear, roundOrdinal, row.rider.riderId);
+                return <Cell key={roundOrdinal ?? i} cell={cell} href={href} />;
+              })}
             </tr>
           ))}
         </tbody>
