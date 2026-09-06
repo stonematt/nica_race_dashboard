@@ -40,7 +40,7 @@ their riders did.
 **1. Head Coach — the one who does the work nobody sees.**
 Loads the race results. Does intake. Does at least a lightweight pass on ingestion to
 make sure we captured every rider in our club. May or may not push all the way down to
-sorting every rider into their squad. This is the only person who *writes* anything.
+sorting every rider into their squad. This is the only person who _writes_ anything.
 Their moment arrives on an ingest, not on a navigation — a job lands in their lap.
 
 **2. Squad Leader — the one who owns a group.**
@@ -54,13 +54,14 @@ Logs in, looks at results, helps with whatever discussion is happening around th
 athletes. Low ceremony, low commitment. Should get value in ten seconds.
 
 **All three** want: league standings, performance by race and by season, and — this one
-matters — to see *their own riders compared against the broader population outside the
-club*. A rider is not just a rank inside our roster; they are a position in a field of
+matters — to see _their own riders compared against the broader population outside the
+club_. A rider is not just a rank inside our roster; they are a position in a field of
 hundreds.
 
 Open questions I'd like you to push on:
+
 - Are these three roles, three modes, or three depths of the same screens?
-- Does the head coach's intake work get *shared* — can it be handed down to squad
+- Does the head coach's intake work get _shared_ — can it be handed down to squad
   leaders as a queue, so the person closest to the riders does the recognizing?
 - The word "discussion" keeps coming up in how I describe two of these people. I don't
   know what that means as a surface. Notes on a rider? A per-race thread? Something a
@@ -76,15 +77,15 @@ Open questions I'd like you to push on:
 These are the situations, in the coach's own head. Which persona owns which is
 deliberately not settled.
 
-| # | Moment | Trigger | Question in their head |
-|---|---|---|---|
-| M0 | Reconcile | New plates arrive with an ingest | "Who is this, and have I seen them before?" |
-| M1 | Results land | A race posts | "What happened?" |
-| M2 | Rider read | A rider asks, or coach preps the conversation | "Is this kid moving?" |
-| M3 | Squad read | Weekly, per squad coach | "How is my group?" |
-| M4 | Field read | After a good or a bad day | "Were we good, or was the field weak?" |
-| M5 | Season read | Mid and late season | "Where is this season going?" |
-| M6 | Season close | Season end, and next pre-season | "What did we do, and who is back?" |
+| #   | Moment       | Trigger                                       | Question in their head                      |
+| --- | ------------ | --------------------------------------------- | ------------------------------------------- |
+| M0  | Reconcile    | New plates arrive with an ingest              | "Who is this, and have I seen them before?" |
+| M1  | Results land | A race posts                                  | "What happened?"                            |
+| M2  | Rider read   | A rider asks, or coach preps the conversation | "Is this kid moving?"                       |
+| M3  | Squad read   | Weekly, per squad coach                       | "How is my group?"                          |
+| M4  | Field read   | After a good or a bad day                     | "Were we good, or was the field weak?"      |
+| M5  | Season read  | Mid and late season                           | "Where is this season going?"               |
+| M6  | Season close | Season end, and next pre-season               | "What did we do, and who is back?"          |
 
 M1 is the spine. M0 is the only write. M5 and M6 have no representation at all today and
 M6 has never even been ticketed.
@@ -127,7 +128,7 @@ M6 has never even been ticketed.
 - **Club tree** (ours, editable by coaches): Club → Squad → Rider
 - They join at **Scoring Team** — the peer string the league reports a rider under
   ("Salem Composite", "Sprague High School Descenders"). A Club spans one or more
-  Scoring Teams, and *which ones changes every season*.
+  Scoring Teams, and _which ones changes every season_.
 
 **Crossing from one tree to the other is the coach's most important move, and it has no
 representation anywhere today.** "My squad" and "the field my rider actually raced in"
@@ -138,19 +139,19 @@ then State Champs); one Round can be two Events when the conferences race separa
 **Season** is the frame everything sits inside, not a filter — because club membership is
 season-keyed, "all seasons" is not even a well-defined club.
 
-**Every rider mark has three states, everywhere:** *positioned* (has a comparable
-result), *started but no comparable position* (DNF, lapped, or time trial), and *did not
-start* (no row at all — visible only by crossing the roster against the rounds). A start
+**Every rider mark has three states, everywhere:** _positioned_ (has a comparable
+result), _started but no comparable position_ (DNF, lapped, or time trial), and _did not
+start_ (no row at all — visible only by crossing the roster against the rounds). A start
 is valuable in itself; the league gates State Champs eligibility on starts, not placings.
 
 **Two orientations, roughly equal in number, and both first-class:** riders chasing
 places, and riders whose season is measured in starts and finishes. This is orthogonal
-to every structural split, so it can never be a filter or a segment — the *shape* of the
+to every structural split, so it can never be a filter or a segment — the _shape_ of the
 views has to serve both. A view that renders only place serves half the roster.
 
-**Two metrics that never share an axis:** *Percent Back* (how far behind the category
+**Two metrics that never share an axis:** _Percent Back_ (how far behind the category
 winner — ours, continuous, the form metric, null for DNF/lapped/time-trial) and
-*Season Points* (the league's published standing totals — theirs, discrete, read
+_Season Points_ (the league's published standing totals — theirs, discrete, read
 verbatim, never recomputed).
 
 **Middle school is a data trap:** team results are high-school-only, so a middle school
@@ -181,7 +182,7 @@ session — but do not quietly design around one.
 - Where season lives — URL segment, persistent selector, or both. Deep links need it.
 - Whether a Round is a navigable place or only an axis on a chart.
 - What the home page is for. What does each of the three people see on landing?
-- The back-path problem: how you get *out* of a deep view.
+- The back-path problem: how you get _out_ of a deep view.
 - **Where the write moment sits.** M0 is the only place anyone writes, and it arrives on
   an ingest rather than a navigation. Does it live in a queue? A banner? A separate
   intake mode? Does it belong to the head coach alone or fan out to squad leaders?
