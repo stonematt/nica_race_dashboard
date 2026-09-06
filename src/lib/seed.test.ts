@@ -134,6 +134,11 @@ describe('seedAdmin', () => {
  * half, so the documented bootstrap read an empty allowlist and refused the
  * operator's own address (#41). These cover the loader `bin/` now calls, and
  * the two states a fresh clone can be in.
+ *
+ * They live here rather than beside `bin/env.ts` because both vitest lanes
+ * collect only `src/**` and `scripts/**` — a `bin/env.test.ts` would never run.
+ * Widening the include globs is a config change, and this is a seeding failure,
+ * so they sit with the seeding they broke.
  */
 describe('the bin/ bootstrap environment', () => {
   const keys = ['AUTH_ALLOWED_EMAILS', 'DATABASE_URL'] as const;
@@ -188,6 +193,24 @@ describe('the bin/ bootstrap environment', () => {
     loadEnvLocal(dir);
 
     expect(databaseUrl()).toBe('./from-shell');
+  });
+
+  /**
+   * The tests above prove the loader; this one proves every entry point routes
+   * through it. Asserted against the source rather than by running the scripts,
+   * because running them is the one thing this repo will not do in a test:
+   * `bin/migrate.ts` writes to whatever `DATABASE_URL` resolves to, and
+   * `bin/fetch.ts` calls a volunteer-run nonprofit's live API.
+   */
+  it('has every bin/ entry point load the file before it reads the environment', () => {
+    const root = path.join(import.meta.dirname, '..', '..', 'bin');
+
+    for (const entry of ['seed.ts', 'migrate.ts', 'normalize.ts', 'fetch.ts']) {
+      const source = fs.readFileSync(path.join(root, entry), 'utf8');
+      expect(source, entry).toMatch(/^loadEnvLocal\(\);$/m);
+      // A direct read would resolve before the file was loaded, which is the bug.
+      expect(source, entry).not.toMatch(/process\.env\.DATABASE_URL/);
+    }
   });
 });
 
