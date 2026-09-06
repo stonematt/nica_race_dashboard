@@ -25,4 +25,12 @@ describe('rewriting the season segment', () => {
   it('fills in a segment for the bare root', () => {
     expect(rewriteSeasonSegment('/', '2026')).toBe('/2026');
   });
+
+  it('rewrites by position, so a later year-shaped segment is left alone', () => {
+    // The season slot is index 1 and nothing else is inspected. A squad or a
+    // Round whose slug happens to look like a year must survive the switch
+    // untouched — pattern-matching for a year instead of taking the first
+    // segment is the bug this pins.
+    expect(rewriteSeasonSegment('/2025/squad/2025', '2026')).toBe('/2026/squad/2025');
+  });
 });
