@@ -11,9 +11,11 @@
  */
 
 import { eq } from 'drizzle-orm';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { databaseUrl, loadEnvLocal } from '../../bin/env.ts';
 import { ClubConfigError, loadClubConfig, pseudonymFor, type ClubConfig } from './club-config.ts';
 import { createTestDb, type TestDatabase } from './db/testing.ts';
 import * as schema from './db/schema.ts';
@@ -120,6 +122,72 @@ describe('seedAdmin', () => {
   it('defaults the display name to the local part of the address', async () => {
     const result = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
     expect(result.displayName).toBe('coach');
+  });
+});
+
+/* ============================================================================
+ * The bootstrap environment — what bin/ reads before any of the above runs
+ * ========================================================================= */
+
+/**
+ * Next loads `.env.local` for the app half and nothing loaded it for the `bin/`
+ * half, so the documented bootstrap read an empty allowlist and refused the
+ * operator's own address (#41). These cover the loader `bin/` now calls, and
+ * the two states a fresh clone can be in.
+ */
+describe('the bin/ bootstrap environment', () => {
+  const keys = ['AUTH_ALLOWED_EMAILS', 'DATABASE_URL'] as const;
+  let saved: Record<string, string | undefined>;
+  let dir: string;
+
+  beforeEach(() => {
+    saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    for (const key of keys) delete process.env[key];
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bike-env-'));
+  });
+
+  afterEach(() => {
+    for (const key of keys) {
+      const value = saved[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('feeds the seed path an allowlist from .env.local, with nothing on the command line', async () => {
+    fs.writeFileSync(path.join(dir, '.env.local'), 'AUTH_ALLOWED_EMAILS="coach@example.org"\n');
+
+    expect(loadEnvLocal(dir)).toBe(path.join(dir, '.env.local'));
+
+    // No `env` option: seedAdmin reads process.env, exactly as bin/seed.ts leaves it.
+    const result = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB });
+    expect(result.created).toBe(true);
+  });
+
+  it('still refuses an unlisted address once the file is loaded', async () => {
+    // The empty-allowlist failure and a real rejection have to stay tellable
+    // apart: this ticket must not make a genuine refusal quieter.
+    fs.writeFileSync(path.join(dir, '.env.local'), 'AUTH_ALLOWED_EMAILS="coach@example.org"\n');
+    loadEnvLocal(dir);
+
+    await expect(seedAdmin(db, { email: 'stranger@example.org', clubName: CLUB })).rejects.toThrow(
+      NotAllowlistedError,
+    );
+  });
+
+  it('treats a missing .env.local as a supported state, so db:migrate still has a database', () => {
+    expect(loadEnvLocal(dir)).toBeUndefined();
+    expect(databaseUrl()).toBe('./.pglite');
+  });
+
+  it('lets a variable already in the environment beat the file', () => {
+    fs.writeFileSync(path.join(dir, '.env.local'), 'DATABASE_URL="./from-file"\n');
+    process.env.DATABASE_URL = './from-shell';
+
+    loadEnvLocal(dir);
+
+    expect(databaseUrl()).toBe('./from-shell');
   });
 });
 

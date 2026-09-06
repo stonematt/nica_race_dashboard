@@ -26,6 +26,9 @@
 import { ClubConfigError, loadClubConfig } from '../src/lib/club-config.ts';
 import { createDb } from '../src/lib/db/index.ts';
 import { NotAllowlistedError, seedAdmin, seedClubConfig } from '../src/lib/seed.ts';
+import { databaseUrl, loadEnvLocal } from './env.ts';
+
+loadEnvLocal();
 
 /** The value following `--<name>`, or undefined when the flag is a bare switch. */
 function flag(name: string): string | undefined {
@@ -48,7 +51,7 @@ if (!seedClub && (!email || !clubName)) {
   process.exit(2);
 }
 
-const url = process.env.DATABASE_URL ?? './.pglite';
+const url = databaseUrl();
 const db = createDb(url);
 
 try {
