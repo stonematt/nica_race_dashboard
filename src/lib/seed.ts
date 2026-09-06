@@ -65,12 +65,21 @@ export interface SeedAdminOptions {
 
 export interface SeedAdminResult {
   userId: string;
+  /** The club the coach is on — read back from the coach row, never assumed. */
   clubId: number;
   email: string;
+  /** The coach's display name as the database holds it. */
   displayName: string;
+  /** The club's name as the database holds it. */
   clubName: string;
   /** False when the admin already existed and nothing was written. */
   created: boolean;
+  /**
+   * The club this run asked for, when the coach turned out to be on a different
+   * one. Undefined whenever there is nothing to report, so its presence *is*
+   * the mismatch — and the caller must say so rather than print success (#62).
+   */
+  requestedClubName?: string;
 }
 
 export class NotAllowlistedError extends Error {
@@ -83,6 +92,33 @@ export class NotAllowlistedError extends Error {
   }
 }
 
+export class ClubMismatchError extends Error {
+  constructor(requested: string, configured: string) {
+    super(
+      `--club "${requested}" is not the club the seed config declares, which is "${configured}". ` +
+        `Clubs are matched by name, so seeding both would make two club rows — the coach on one, ` +
+        `the roster on the other, and an empty app for that coach. ` +
+        `Drop --club to take the name from config/club-seed.json, or change the club there.`,
+    );
+    this.name = 'ClubMismatchError';
+  }
+}
+
+/**
+ * The club an admin seed should land on.
+ *
+ * The config file carries the club's identity — it is what the roster, the
+ * plate mappings and the squads are seeded onto — so it is the answer, and
+ * `--club` is at most an agreement. The README used to retype the name and
+ * retyped a different one, which is the whole of #62; nothing should have to
+ * say it twice.
+ */
+export function resolveAdminClub(config: ClubConfig, requested?: string): string {
+  const name = requested?.trim();
+  if (!name || name === config.club) return config.club;
+  throw new ClubMismatchError(name, config.club);
+}
+
 export async function seedAdmin(db: Db, options: SeedAdminOptions): Promise<SeedAdminResult> {
   const email = options.email.trim().toLowerCase();
   const env = options.env ?? process.env;
@@ -91,10 +127,6 @@ export async function seedAdmin(db: Db, options: SeedAdminOptions): Promise<Seed
 
   const displayName = options.displayName?.trim() || (email.split('@')[0] ?? email);
   const clubName = options.clubName.trim();
-
-  // Club first: the coach row references it. Shared with seedClubConfig, so
-  // seeding an admin and seeding the config land on the same club row.
-  const clubId = await upsertClub(db, clubName);
 
   // `user` is adapter-owned and carries no unique index on email, so identity
   // is resolved by query, not by an ON CONFLICT target. Do not add one — the
@@ -106,14 +138,37 @@ export async function seedAdmin(db: Db, options: SeedAdminOptions): Promise<Seed
       .select()
       .from(schema.coach)
       .where(eq(schema.coach.userId, userId));
-    if (existingCoach[0]) {
-      return { userId, clubId, email, displayName, clubName, created: false };
+    const coach = existingCoach[0];
+    if (coach) {
+      // Nothing to write, so nothing is created — including the club. Upserting
+      // it before this check is what put a second club row in the database on a
+      // re-run under a different name, and returning that row is what made the
+      // CLI report a success that had not happened (#62). Read the coach's own
+      // club back instead: this describes the database, not the request.
+      const [club] = await db.select().from(schema.club).where(eq(schema.club.id, coach.clubId));
+      const result: SeedAdminResult = {
+        userId,
+        clubId: coach.clubId,
+        email,
+        displayName: coach.displayName,
+        clubName: club!.name,
+        created: false,
+      };
+      if (club!.name !== clubName) result.requestedClubName = clubName;
+      return result;
     }
     // A user with no coach profile: half-seeded, or created by a magic-link
     // sign-in before this ever ran. Finish the job rather than refusing.
+    const clubId = await upsertClub(db, clubName);
     await db.insert(schema.coach).values({ userId, clubId, displayName });
     return { userId, clubId, email, displayName, clubName, created: true };
   }
+
+  // Club first on the paths that write a coach: the coach row references it.
+  // Shared with seedClubConfig, so seeding an admin and seeding the config land
+  // on the same club row — provided both are given the same name, which is what
+  // resolveAdminClub above is for.
+  const clubId = await upsertClub(db, clubName);
 
   const [user] = await db
     .insert(schema.users)
