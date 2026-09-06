@@ -287,11 +287,11 @@ export async function seedClubConfig(
 
     // Read the club's current roster reach before rewriting anything: after the
     // squads are reconciled, a rider dropped from the config is unreachable.
-    const priorRiderIds = await ridersInClubSquads(tx, clubId);
+    const priorRiderIds = await ridersInClubSquads(tx, clubId, seasonId);
 
     await replaceScoringTeams(tx, clubId, seasonId, config);
     const { riderIds, ridersCreated, plates } = await replaceRiders(tx, seasonId, config);
-    const squadMembers = await replaceSquads(tx, clubId, config, riderIds);
+    const squadMembers = await replaceSquads(tx, clubId, seasonId, config, riderIds);
 
     const dropped = [...priorRiderIds].filter((id) => ![...riderIds.values()].includes(id));
     if (dropped.length > 0) {
@@ -406,24 +406,27 @@ async function replaceRiders(
   return { riderIds, ridersCreated, plates };
 }
 
+/**
+ * Reconciles this club's squads *for one season*. A config file carries exactly
+ * one season, so the delete has to be season-scoped too: without it, seeding
+ * 2026 would reap 2025's squads as though the coach had dropped them.
+ */
 async function replaceSquads(
   tx: Tx,
   clubId: number,
+  seasonId: number,
   config: ClubConfig,
   riderIds: Map<string, number>,
 ): Promise<number> {
+  const inSeason = and(eq(schema.squad.clubId, clubId), eq(schema.squad.seasonId, seasonId));
   const names = config.squads.map((squad) => squad.name);
   await tx
     .delete(schema.squad)
-    .where(
-      names.length === 0
-        ? eq(schema.squad.clubId, clubId)
-        : and(eq(schema.squad.clubId, clubId), notInArray(schema.squad.name, names)),
-    );
+    .where(names.length === 0 ? inSeason : and(inSeason, notInArray(schema.squad.name, names)));
 
   let squadMembers = 0;
   for (const squad of config.squads) {
-    const squadId = await upsertSquad(tx, clubId, squad.name);
+    const squadId = await upsertSquad(tx, clubId, seasonId, squad.name);
     await tx.delete(schema.squadMember).where(eq(schema.squadMember.squadId, squadId));
     if (squad.members.length > 0) {
       await tx
@@ -435,13 +438,17 @@ async function replaceSquads(
   return squadMembers;
 }
 
-/** The riders this club can currently reach, which is through its squads. */
-async function ridersInClubSquads(tx: Tx, clubId: number): Promise<Set<number>> {
+/**
+ * The riders this club can currently reach in this season, which is through its
+ * squads. Scoped to the season being seeded, or a rider squadded only in some
+ * other year reads as still-present here and their plates survive a drop.
+ */
+async function ridersInClubSquads(tx: Tx, clubId: number, seasonId: number): Promise<Set<number>> {
   const rows = await tx
     .select({ riderId: schema.squadMember.riderId })
     .from(schema.squadMember)
     .innerJoin(schema.squad, eq(schema.squad.id, schema.squadMember.squadId))
-    .where(eq(schema.squad.clubId, clubId));
+    .where(and(eq(schema.squad.clubId, clubId), eq(schema.squad.seasonId, seasonId)));
   return new Set(rows.map((row) => row.riderId));
 }
 
@@ -486,15 +493,26 @@ async function upsertClub(executor: Executor, name: string): Promise<number> {
   return row!.id;
 }
 
-async function upsertSquad(tx: Tx, clubId: number, name: string): Promise<number> {
+async function upsertSquad(
+  tx: Tx,
+  clubId: number,
+  seasonId: number,
+  name: string,
+): Promise<number> {
   const existing = await tx
     .select()
     .from(schema.squad)
-    .where(and(eq(schema.squad.clubId, clubId), eq(schema.squad.name, name)));
+    .where(
+      and(
+        eq(schema.squad.clubId, clubId),
+        eq(schema.squad.seasonId, seasonId),
+        eq(schema.squad.name, name),
+      ),
+    );
   if (existing[0]) return existing[0].id;
   const [row] = await tx
     .insert(schema.squad)
-    .values({ clubId, name })
+    .values({ clubId, seasonId, name })
     .returning({ id: schema.squad.id });
   return row!.id;
 }

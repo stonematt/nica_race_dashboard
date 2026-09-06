@@ -155,31 +155,36 @@ export async function resolveClub(
 }
 
 /**
- * The squads to show.
+ * The squads to show, for the season this race belongs to.
  *
  * A coach's own squads, from `squad_coach` — or every squad in the club when
  * that link is empty. Nothing seeds `squad_coach` yet, so a hard filter would
  * render an empty page for every real user today. Named here rather than left
  * implicit: when the roster surface lands and coaches are linked to squads,
  * this fallback becomes the wrong answer and should go.
+ *
+ * Squads are season-keyed (#81), so the season is not optional: without it a
+ * 2025 race renders every squad the club has ever had, this year's included.
  */
 async function squadNames(
   db: AnyDatabase,
   clubId: number,
+  seasonId: number,
   userId: string | null,
 ): Promise<{ id: number; name: string }[]> {
   if (userId !== null) {
     const mine = await db.execute(sql`
       select s.id, s.name from squad s
         join squad_coach sc on sc.squad_id = s.id
-       where sc.user_id = ${userId} and s.club_id = ${clubId}
+       where sc.user_id = ${userId} and s.club_id = ${clubId} and s.season_id = ${seasonId}
        order by s.name`);
     const rows = rowsOf(mine);
     if (rows.length > 0) return rows.map((row) => ({ id: num(row.id), name: str(row.name) }));
   }
 
   const all = await db.execute(sql`
-    select id, name from squad where club_id = ${clubId} order by name`);
+    select id, name from squad
+     where club_id = ${clubId} and season_id = ${seasonId} order by name`);
   return rowsOf(all).map((row) => ({ id: num(row.id), name: str(row.name) }));
 }
 
@@ -209,7 +214,10 @@ export async function loadRaceDetail(
     return { race, club: null, squads: [], unmapped: [], starters: fieldRows.length };
   }
 
-  const squads = await squadNames(db, club.id, userId);
+  // Not on RaceHeader: the season id is a join key, and the header carries the
+  // year because that is what renders.
+  const seasonId = num(first.season_id);
+  const squads = await squadNames(db, club.id, seasonId, userId);
 
   // Identity resolved by the view, inside the plate's race bounds. A rider who
   // changed plates mid-season stays one person; a reissued plate stays two.
@@ -218,7 +226,8 @@ export async function loadRaceDetail(
       from v_rider_result rr
       join squad_member sm on sm.rider_id = rr.rider_id
       join squad s on s.id = sm.squad_id
-     where rr.event_id = ${race.eventId} and s.club_id = ${club.id}`);
+     where rr.event_id = ${race.eventId}
+       and s.club_id = ${club.id} and s.season_id = ${seasonId}`);
 
   const bySquad = new Map<number, { row: RaceResultRow; name: string }[]>();
   for (const row of rowsOf(memberResult)) {

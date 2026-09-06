@@ -133,7 +133,7 @@ beforeAll(async () => {
   await db
     .insert(schema.clubScoringTeam)
     .values({ clubId: 1, seasonId: 1, scoringTeam: DESCENDERS });
-  await db.insert(schema.squad).values({ id: 1, clubId: 1, name: 'Descenders' });
+  await db.insert(schema.squad).values({ id: 1, clubId: 1, seasonId: 1, name: 'Descenders' });
   await db.insert(schema.rider).values([
     { id: 1, displayName: '«RIDER-A»' },
     { id: 2, displayName: '«RIDER-B»' },
@@ -151,6 +151,16 @@ beforeAll(async () => {
     { squadId: 1, riderId: 2 },
     { squadId: 1, riderId: 3 },
     { squadId: 1, riderId: 4 },
+  ]);
+
+  // Next season, same club, same riders, a squad the coach renamed. Squads are
+  // season-keyed (#81), so nothing but the season separates this from the one
+  // above — which is exactly what a race page must not get wrong.
+  await db.insert(schema.season).values({ id: 2, year: 2026 });
+  await db.insert(schema.squad).values({ id: 2, clubId: 1, seasonId: 2, name: 'Racers' });
+  await db.insert(schema.squadMember).values([
+    { squadId: 2, riderId: 1 },
+    { squadId: 2, riderId: 2 },
   ]);
 });
 
@@ -192,6 +202,16 @@ describe('squad is the frame, not a filter', () => {
 
   it('counts the squad in its header, DNF included', async () => {
     expect((await detail()).squads[0]!.summary).toBe('4 raced · 0 scored · 1 DNF');
+  });
+
+  it('shows only the squads that existed in this race’s season', async () => {
+    const page = await detail();
+    expect(page.squads.map((s) => s.name)).toEqual(['Descenders']);
+  });
+
+  it('does not draw a rider onto a squad from another season', async () => {
+    const page = await detail();
+    expect(page.squads.flatMap((s) => s.riders)).toHaveLength(4);
   });
 });
 

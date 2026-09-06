@@ -41,7 +41,8 @@ per season. When a coach says "team", they mean this.
 
 **Squad**:
 A coach-owned grouping of riders inside a Club, cutting across Scoring Teams.
-Current-state only; no history.
+Constituted per Season. Within a Season it is current-state only: a coach regroups at
+will and we record where a Rider ended up, never the mid-season churn.
 
 **Rider**:
 A tracked person on the club roster. Everyone else in the results is a result row, not
@@ -86,7 +87,8 @@ never recomputed, and never plotted on the same axis as Percent Back.
 **Roster**:
 Which Riders belonged to a Club in a given Season. Season-keyed, so a Rider who
 graduated or transferred stays in the seasons they actually rode. A Squad is likewise
-constituted per Season.
+constituted per Season. A Rider may be on two Clubs' Rosters in one Season — that is a
+mid-season transfer, and both Clubs need to read it.
 
 **Prior Name**:
 A name a Rider used in an earlier Season. Held for lookup and reconciliation only, and
