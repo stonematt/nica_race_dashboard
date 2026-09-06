@@ -8,10 +8,24 @@
  * invented people in it.
  */
 
-import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import { scan, trackedFiles } from './privacy-guard.ts';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, realpathSync, symlinkSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { resolveTrackedLink, scan, trackedFiles } from './privacy-guard.ts';
 import { repoRoot } from '../src/lib/fixtures.ts';
+
+/**
+ * Every temporary tree the symlink tests build, removed again afterwards.
+ * Nothing here touches this checkout's index or the real corpus.
+ */
+const created: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(created.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 /** The shape of a RaceResult list payload, with rows. */
 function payload(rows: unknown[][]) {
@@ -258,6 +272,200 @@ describe('the name rules', () => {
 
   it('skips a file it could not read as text', () => {
     expect(scan([{ path: 'public/logo.png' }])).toEqual([]);
+  });
+});
+
+describe('the corpus-symlink rule', () => {
+  // #58: #52 closed the case where the link is named exactly `fixtures`, and
+  // recorded the rest as out of scope. A link called anything else still walked
+  // past both defences. The link's NAME is not the question; where it lands is.
+
+  it('refuses a symlink into the corpus under a name that gives nothing away', () => {
+    // `ln -s "$PWD/fixtures" ./fixtures2` — the reproduction from the ticket.
+    expect(
+      scan([{ path: 'fixtures2', link: { resolved: 'fixtures' } }]).map((f) => f.rule),
+    ).toEqual(['corpus-symlink']);
+  });
+
+  it('refuses a symlink into a directory under the corpus', () => {
+    expect(
+      scan([{ path: 'nested-link', link: { resolved: 'fixtures/2025' } }]).map((f) => f.rule),
+    ).toEqual(['corpus-symlink']);
+  });
+
+  it('refuses a symlink into the corpus copy that lives outside the repo', () => {
+    // docs/fixtures.md tells you to symlink the corpus into a worktree. Named
+    // `fixtures` that is rule 1's business; named anything else it is this one's,
+    // and the target resolves nowhere near the checkout.
+    const resolved = '/home/someone/.local/share/bike_race_results/fixtures/2025';
+    expect(scan([{ path: 'corpus', link: { resolved } }]).map((f) => f.rule)).toEqual([
+      'corpus-symlink',
+    ]);
+  });
+
+  it('refuses one into data/ as well, so the two forbidden names stay in step', () => {
+    expect(scan([{ path: 'dump', link: { resolved: 'data/2025' } }]).map((f) => f.rule)).toEqual([
+      'corpus-symlink',
+    ]);
+  });
+
+  it('names the link and where it landed, without echoing a row', () => {
+    const [finding] = scan([{ path: 'fixtures2', link: { resolved: 'fixtures/2025' } }]);
+    expect(finding.path).toBe('fixtures2');
+    expect(finding.detail).toContain('fixtures/2025');
+  });
+
+  it('leaves an ordinary symlink alone', () => {
+    // The rule that must not start crying wolf. A link to docs/ is a link to
+    // docs/, and a guard that fails on one gets switched off.
+    expect(scan([{ path: 'docslink', link: { resolved: 'docs' } }])).toEqual([]);
+    expect(scan([{ path: 'readme', link: { resolved: 'docs/fixtures.md' } }])).toEqual([]);
+  });
+
+  it('fails closed on a link it cannot resolve, and says which one and why', () => {
+    // A dangling link is a link whose destination the guard cannot see. It is
+    // refused rather than waved through, and it reports rather than throws.
+    const [finding] = scan([{ path: 'gone', link: { unresolved: '../elsewhere/fixtures' } }]);
+    expect(finding.rule).toBe('unresolvable-symlink');
+    expect(finding.path).toBe('gone');
+    expect(finding.detail).toContain('../elsewhere/fixtures');
+    expect(finding.detail).toMatch(/could not be resolved/);
+  });
+
+  it('still reports a link named `fixtures` as the path finding it has always been', () => {
+    // The two layers agreeing on this exact path was the point of #52. Widening
+    // must not reclassify it out from under the rule that already had it.
+    expect(
+      scan([{ path: 'fixtures', content: '', link: { resolved: 'fixtures' } }]).map((f) => f.rule),
+    ).toEqual(['tracked-corpus-path']);
+  });
+
+  it('still scans an ordinary symlink’s content, so nothing is narrowed', () => {
+    // A symlink is read through to its target. If the guard started skipping
+    // every link it would lose a finding it makes today.
+    const content = JSON.stringify({ rows: [['214', 'Jordan Rivers', '00:41:12.3']] });
+    expect(
+      scan([{ path: 'rows.json', content, link: { resolved: 'docs/rows.json' } }]).map(
+        (f) => f.rule,
+      ),
+    ).toEqual(['row-name']);
+  });
+});
+
+describe('resolving a tracked symlink', () => {
+  // The filesystem half, which is where the bug actually lived: scan() can only
+  // be as wide as what the shell hands it.
+
+  async function tree(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'nica-guard-'));
+    created.push(dir);
+    const root = realpathSync(dir);
+    await mkdir(join(root, 'fixtures', '2025'), { recursive: true });
+    await mkdir(join(root, 'docs'), { recursive: true });
+    return root;
+  }
+
+  it('reports a link into the corpus relative to the repo root', async () => {
+    const root = await tree();
+    symlinkSync(join(root, 'fixtures'), join(root, 'fixtures2'));
+    expect(resolveTrackedLink('fixtures2', root)).toEqual({ resolved: 'fixtures' });
+  });
+
+  it('follows a relative link from a subdirectory', async () => {
+    const root = await tree();
+    symlinkSync('../fixtures/2025', join(root, 'docs', 'nested-link'));
+    expect(resolveTrackedLink('docs/nested-link', root)).toEqual({ resolved: 'fixtures/2025' });
+  });
+
+  it('follows a chain of links through to a payload file', async () => {
+    const root = await tree();
+    await writeFile(join(root, 'fixtures', '2025', 'raw.json'), '{}');
+    symlinkSync('fixtures/2025', join(root, 'linkdir'));
+    symlinkSync('linkdir/raw.json', join(root, 'evidence.json'));
+    expect(resolveTrackedLink('evidence.json', root)).toEqual({
+      resolved: join('fixtures', '2025', 'raw.json'),
+    });
+  });
+
+  it('reports an ordinary link relative to the root too', async () => {
+    const root = await tree();
+    symlinkSync(join(root, 'docs'), join(root, 'docslink'));
+    expect(resolveTrackedLink('docslink', root)).toEqual({ resolved: 'docs' });
+  });
+
+  it('keeps a target outside the repo absolute', async () => {
+    const root = await tree();
+    const outside = await mkdtemp(join(tmpdir(), 'nica-outside-'));
+    created.push(outside);
+    symlinkSync(outside, join(root, 'elsewhere'));
+    expect(resolveTrackedLink('elsewhere', root)).toEqual({ resolved: realpathSync(outside) });
+  });
+
+  it('reports a dangling link as unresolved, carrying the target it names', async () => {
+    const root = await tree();
+    symlinkSync('../nowhere/fixtures', join(root, 'gone'));
+    expect(resolveTrackedLink('gone', root)).toEqual({ unresolved: '../nowhere/fixtures' });
+  });
+});
+
+describe('the guard as a script', () => {
+  // End to end, against the ticket's own reproduction: a real repository, a
+  // real forced add, the real entry point.
+
+  async function scratchRepo(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'nica-guard-repo-'));
+    created.push(dir);
+    const root = realpathSync(dir);
+    spawnSync('git', ['init', '--quiet', '-b', 'main'], { cwd: root });
+    await mkdir(join(root, 'fixtures', '2025'), { recursive: true });
+    await mkdir(join(root, 'docs'), { recursive: true });
+    await writeFile(join(root, 'fixtures', '2025', 'raw.json'), '{"data":[["«RIDER-A»"]]}');
+    await writeFile(join(root, 'docs', 'notes.md'), '# notes\n');
+    await writeFile(join(root, '.gitignore'), 'fixtures/\n');
+    spawnSync('git', ['add', '.gitignore', 'docs/notes.md'], { cwd: root });
+    return root;
+  }
+
+  function runGuard(cwd: string) {
+    return spawnSync('node', [join(repoRoot(), 'scripts', 'privacy-guard.ts')], {
+      cwd,
+      encoding: 'utf8',
+    });
+  }
+
+  it('refuses the ticket’s reproduction: a corpus symlink under another name', async () => {
+    const root = await scratchRepo();
+    symlinkSync(join(root, 'fixtures'), join(root, 'fixtures2'));
+    spawnSync('git', ['add', '-f', 'fixtures2'], { cwd: root });
+
+    const run = runGuard(root);
+
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('corpus-symlink');
+    expect(run.stderr).toContain('fixtures2');
+  });
+
+  it('reports a dangling tracked link without a stack trace', async () => {
+    const root = await scratchRepo();
+    symlinkSync('../nowhere/fixtures', join(root, 'gone'));
+    spawnSync('git', ['add', '-f', 'gone'], { cwd: root });
+
+    const run = runGuard(root);
+
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('unresolvable-symlink');
+    expect(run.stderr).not.toMatch(/at .*\(/);
+  });
+
+  it('stays clean when the only symlink is an ordinary one', async () => {
+    const root = await scratchRepo();
+    symlinkSync(join(root, 'docs'), join(root, 'docslink'));
+    spawnSync('git', ['add', 'docslink'], { cwd: root });
+
+    const run = runGuard(root);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('privacy guard: clean');
   });
 });
 

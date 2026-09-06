@@ -17,11 +17,13 @@
  *   1. Nothing under `fixtures/` or `data/` is ever tracked, and neither path
  *      is ever tracked by itself either — a symlink named exactly `fixtures`
  *      or `data` is a file to git, not a directory, so a prefix check alone
- *      misses it (#52). This is a path check, so it does not follow an
- *      arbitrarily-named symlink into a corpus directory; the pre-commit hook
- *      has the same blind spot, on purpose — a payload reached that way
- *      through a *tracked* file still gets read and scanned by rules 2 and 3
- *      below.
+ *      misses it (#52).
+ *   1b. A tracked symlink that RESOLVES into either directory is refused under
+ *      any name (#58). Rule 1 reads the path git recorded; this reads where
+ *      that path lands, which is the only question that matters once the link
+ *      is called `fixtures2` instead. A link the guard cannot resolve at all
+ *      is refused too — an unreadable destination is not a cleared one. The
+ *      pre-commit hook carries the same two checks so the layers still agree.
  *   2. A tracked RaceResult-shaped payload must carry NO rows. This is the rule
  *      that guards the committed shape corpus (#31): a stripper regression that
  *      starts emitting real rows fails the build rather than publishing them.
@@ -38,7 +40,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readlinkSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, sep } from 'node:path';
 
 /**
  * Directories whose contents are never committed. Rule 1 also rejects the
@@ -47,6 +50,13 @@ import { readFileSync } from 'node:fs';
  * directory of that name is. See rule 1's doc above.
  */
 export const FORBIDDEN_PREFIXES = ['fixtures/', 'data/'];
+
+/**
+ * The same two directories as bare names, for the segment test rule 1b applies
+ * to a resolved link target. Derived rather than restated so the two rules can
+ * never drift apart into guarding different sets.
+ */
+const FORBIDDEN_NAMES = FORBIDDEN_PREFIXES.map((prefix) => prefix.slice(0, -1));
 
 /** Only these get read for name shapes; everything else is prose or code. */
 const SCANNED_EXTENSIONS = ['.json', '.csv'];
@@ -81,9 +91,22 @@ export type NameRule = 'row-name' | 'identity-key' | 'name-map';
 
 export interface Finding {
   path: string;
-  rule: 'tracked-corpus-path' | 'payload-rows' | NameRule;
+  rule:
+    'tracked-corpus-path' | 'corpus-symlink' | 'unresolvable-symlink' | 'payload-rows' | NameRule;
   detail: string;
 }
+
+/**
+ * Where a tracked symlink points, as the shell was able to work it out.
+ *
+ * `resolved` is the destination relative to the repo root when it lands inside
+ * the checkout and absolute when it lands outside — the corpus has a second
+ * copy under `~/.local/share/`, and docs/fixtures.md tells you to link it into
+ * a worktree, so an out-of-tree target is the ordinary case rather than the
+ * exotic one. `unresolved` carries the raw link text for a link that resolves
+ * nowhere; the guard reports that rather than guessing.
+ */
+export type LinkTarget = { resolved: string } | { unresolved: string };
 
 const NAME_RULE_DETAIL: Record<NameRule, string> = {
   'row-name': 'a positional row holds a value shaped like a person’s full name',
@@ -95,6 +118,14 @@ export interface ScannedFile {
   path: string;
   /** Undefined for a file that could not be read as text — treated as opaque. */
   content?: string;
+  /** Present only for a tracked symlink. See LinkTarget. */
+  link?: LinkTarget;
+}
+
+/** One row of `git ls-files -s`: the path, and whether git recorded a symlink. */
+export interface TrackedEntry {
+  path: string;
+  isSymlink: boolean;
 }
 
 /** A RaceResult list payload: a `DataFields` column list beside a `data` bag of rows. */
@@ -227,13 +258,45 @@ function csvNameFindings(content: string): boolean {
 }
 
 /**
+ * Rule 1b over a resolved link target. Returns the finding, or undefined for a
+ * link that lands somewhere ordinary.
+ *
+ * The test is on path SEGMENTS, not a prefix: the target may be
+ * `fixtures/2025`, or `/home/x/.local/share/bike_race_results/fixtures`, and
+ * both are the corpus. Expressing an in-tree target relative to the repo root
+ * before the split is what keeps a checkout that happens to live under a
+ * directory called `data` from flagging every link in it.
+ */
+function linkFinding(link: LinkTarget): Omit<Finding, 'path'> | undefined {
+  if ('unresolved' in link) {
+    return {
+      rule: 'unresolvable-symlink',
+      detail:
+        `symlink to \`${link.unresolved}\` could not be resolved; a link whose ` +
+        'destination cannot be read is refused rather than cleared',
+    };
+  }
+
+  const segments = link.resolved.split(/[\\/]/);
+  const name = FORBIDDEN_NAMES.find((forbidden) => segments.includes(forbidden));
+  if (name === undefined) return undefined;
+
+  return {
+    rule: 'corpus-symlink',
+    detail:
+      `symlink resolving to \`${link.resolved}\`, which is inside \`${name}/\` — ` +
+      'the corpus is never committed, under this name or any other',
+  };
+}
+
+/**
  * The whole guard. Pure: hand it what git says is tracked and it reports what
  * must not be there.
  */
 export function scan(files: ScannedFile[]): Finding[] {
   const findings: Finding[] = [];
 
-  for (const { path, content } of files) {
+  for (const { path, content, link } of files) {
     const forbidden = FORBIDDEN_PREFIXES.find(
       (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
     );
@@ -248,6 +311,17 @@ export function scan(files: ScannedFile[]): Finding[] {
             : `tracked under ${forbidden}, which is never committed`,
       });
       continue;
+    }
+
+    if (link !== undefined) {
+      const symlinkFinding = linkFinding(link);
+      if (symlinkFinding !== undefined) {
+        findings.push({ path, ...symlinkFinding });
+        continue;
+      }
+      // An ordinary link falls through on purpose: readFileSync() follows it,
+      // so its target's content is scanned by rules 2 and 3 exactly as it is
+      // today. Skipping every symlink here would be a narrowing.
     }
 
     if (content === undefined) continue;
@@ -291,13 +365,66 @@ export function scan(files: ScannedFile[]): Finding[] {
   return findings;
 }
 
-/** Paths git is tracking, relative to the repo root. */
-export function trackedFiles(cwd = process.cwd()): string[] {
-  const listed = spawnSync('git', ['ls-files', '-z'], { cwd, encoding: 'utf8' });
+/**
+ * What git is tracking, relative to the repo root, with git's own record of
+ * which entries are symlinks (mode 120000). Asking the index rather than
+ * lstat()ing the working tree keeps the question the one the guard is for:
+ * what is *committed*, not what happens to be on this disk.
+ */
+export function trackedEntries(cwd = process.cwd()): TrackedEntry[] {
+  const listed = spawnSync('git', ['ls-files', '-s', '-z'], { cwd, encoding: 'utf8' });
   if (listed.status !== 0) {
     throw new Error(`git ls-files failed: ${listed.stderr.trim()}`);
   }
-  return listed.stdout.split('\0').filter((path) => path.length > 0);
+  return listed.stdout
+    .split('\0')
+    .filter((record) => record.length > 0)
+    .map((record) => {
+      // `<mode> <object> <stage>\t<path>`, and -z leaves the path unquoted.
+      const tab = record.indexOf('\t');
+      if (tab === -1) throw new Error(`git ls-files returned an unreadable record: ${record}`);
+      return { path: record.slice(tab + 1), isSymlink: record.startsWith('120000 ') };
+    });
+}
+
+/** Paths git is tracking, relative to the repo root. */
+export function trackedFiles(cwd = process.cwd()): string[] {
+  return trackedEntries(cwd).map((entry) => entry.path);
+}
+
+/**
+ * Where a tracked symlink lands, ready for rule 1b. Fails closed: anything the
+ * filesystem will not answer comes back as `unresolved` rather than as a throw,
+ * so a dangling link is a finding with a message and not a stack trace.
+ */
+export function resolveTrackedLink(path: string, cwd = process.cwd()): LinkTarget {
+  const link = join(cwd, path);
+
+  let resolved: string;
+  try {
+    resolved = realpathSync(link);
+  } catch {
+    let raw: string;
+    try {
+      raw = readlinkSync(link);
+    } catch {
+      raw = '(unreadable)';
+    }
+    return { unresolved: raw };
+  }
+
+  let root: string;
+  try {
+    root = realpathSync(cwd);
+  } catch {
+    return { resolved };
+  }
+
+  const inside = relative(root, resolved);
+  if (inside === '' || isAbsolute(inside) || inside === '..' || inside.startsWith(`..${sep}`)) {
+    return { resolved };
+  }
+  return { resolved: inside };
 }
 
 function read(path: string): string | undefined {
@@ -309,8 +436,14 @@ function read(path: string): string | undefined {
 }
 
 function main(): void {
-  const tracked = trackedFiles();
-  const findings = scan(tracked.map((path) => ({ path, content: read(path) })));
+  const tracked = trackedEntries();
+  const findings = scan(
+    tracked.map(({ path, isSymlink }) => ({
+      path,
+      content: read(path),
+      link: isSymlink ? resolveTrackedLink(path) : undefined,
+    })),
+  );
 
   if (findings.length === 0) {
     console.log(`privacy guard: clean (${tracked.length} tracked files)`);
