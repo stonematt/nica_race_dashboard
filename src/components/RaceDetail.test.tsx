@@ -217,8 +217,8 @@ describe('the field strip', () => {
     // club-vs-league will stack, so it is drawn here rather than left to be
     // discovered broken by the view that first needs it.
     const marks = [
-      { pct: 0, ours: false },
-      { pct: 12, ours: true, label: '«RIDER-A»' },
+      { pct: 0, ours: false, place: '1' },
+      { pct: 12, ours: true, label: '«RIDER-A»', place: '2' },
     ];
     const md = renderToStaticMarkup(<FieldStrip marks={marks} size="md" />);
     const sm = renderToStaticMarkup(<FieldStrip marks={marks} size="sm" />);
@@ -235,9 +235,9 @@ describe('the field strip', () => {
       <FieldStrip
         size="md"
         marks={[
-          { pct: 0, ours: false },
-          { pct: 4, ours: true, label: '«RIDER-A»' },
-          { pct: 22, ours: true, label: '«RIDER-B»' },
+          { pct: 0, ours: false, place: '1' },
+          { pct: 4, ours: true, label: '«RIDER-A»', place: '2' },
+          { pct: 22, ours: true, label: '«RIDER-B»', place: '3' },
         ]}
       />,
     );
@@ -248,8 +248,8 @@ describe('the field strip', () => {
     const markup = renderToStaticMarkup(
       <FieldStrip
         marks={[
-          { pct: 0, ours: false },
-          { pct: 19.6, ours: true, label: '«RIDER-A»' },
+          { pct: 0, ours: false, place: '1' },
+          { pct: 19.6, ours: true, label: '«RIDER-A»', place: '2' },
         ]}
       />,
     );

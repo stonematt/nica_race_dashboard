@@ -41,15 +41,15 @@
  * view — the two callers this file's header already anticipates — get a
  * correct dot order without having to remember to pre-sort.
  *
- * `place` is optional on `FieldMark` rather than required, on purpose: today's
- * one caller (`race-detail.ts`'s `categoryMarks`/`markFor`) already hands over
- * a pre-sorted field and does not carry a `place` on its marks, and threading
- * one through would have meant editing `RaceDetail.tsx` and its test, which
- * sit outside this ticket's fence. A mark with no `place` sorts as tied with
- * every other mark with no `place`, which — because the sort is stable —
- * reproduces exactly the order the caller handed in. Nothing about the
- * rendered output for today's caller changes; the guarantee is additive for a
- * caller that supplies `place`, which the wall and the Category view will.
+ * `place` is required on `FieldMark`, not optional: an optional field is a
+ * guarantee a future caller could still omit by accident, silently
+ * reproducing the exact pre-#74 bug for that caller — ties on `ours` alone,
+ * falling back to whatever order its array happened to arrive in. Owning the
+ * order only works if the module cannot be handed a mark without one, so the
+ * guarantee lives in the type rather than in a caller's memory. Every caller —
+ * `race-detail.ts`'s `categoryMarks`/`markFor`, and the wall and Category
+ * views this file's header already anticipates — passes through the source's
+ * published `place` string verbatim; nothing here computes or re-derives one.
  * `ours` still wins over everything else: it is the primary sort key, `place`
  * only orders within each of the two `ours` groups.
  */
@@ -73,11 +73,11 @@ export type FieldMark = {
   pct: number | null;
   /**
    * The published place, exactly as the source printed it — `"1"`, `"10"`,
-   * `"*"` for a DNF. Optional: see "Dot order" in the module header for what
-   * omitting it costs. Never computed or re-derived here — the only legal
-   * value is what the source published.
+   * `"*"` for a DNF. Required: see "Dot order" in the module header for why an
+   * optional field does not close issue #74. Never computed or re-derived
+   * here — the only legal value is what the source published.
    */
-  place?: string;
+  place: string;
   /** Highlighted. Orange with an ink ring: our rider, in a field of grey. */
   ours: boolean;
   /** Named only for a highlighted mark; it reaches the accessible description. */
@@ -148,22 +148,20 @@ const WHOLE_NUMBER = /^\d+$/;
  * Mirrors `race-detail.ts`'s `placeRank`: `place` is the source's own string —
  * `"1"`, `"10"`, `"*"` for a rider it did not place — so sorting it lexically
  * would put `10` ahead of `2`. Read as a number when it is one; everything
- * else, including a mark that carries no `place` at all, sorts to the same
- * rank at the back. Nothing here computes or re-derives a place.
+ * else, including an empty string, sorts to the same rank at the back.
+ * Nothing here computes or re-derives a place.
  */
-function placeRank(place: string | undefined): number {
-  if (place === undefined) return Number.POSITIVE_INFINITY;
+function placeRank(place: string): number {
   const trimmed = place.trim();
   return WHOLE_NUMBER.test(trimmed) ? Number(trimmed) : Number.POSITIVE_INFINITY;
 }
 
 /**
- * Two marks, by `place`. Ties (any pair of non-numeric or absent places) come
- * back `0` — `Array.prototype.sort` is stable, so they keep whatever order the
- * caller handed in, which is what makes today's one caller's output unchanged
- * when it never sets `place` at all.
+ * Two marks, by `place`. Ties (any pair of non-numeric places) come back `0` —
+ * `Array.prototype.sort` is stable, so they keep whatever order the caller
+ * handed in.
  */
-function comparePlace(a: string | undefined, b: string | undefined): number {
+function comparePlace(a: string, b: string): number {
   const rankA = placeRank(a);
   const rankB = placeRank(b);
   if (rankA === rankB) return 0;

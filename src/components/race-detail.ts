@@ -223,7 +223,7 @@ export function chips(row: RaceResultRow): Chip[] {
 
 /** The strip mark for one rider. Null `pct` is the invariant, carried through. */
 export function markFor(row: RaceResultRow, name: string): FieldMark {
-  return { pct: row.pctBack, ours: true, label: name };
+  return { pct: row.pctBack, place: row.place, ours: true, label: name };
 }
 
 /** Their line beside the strip, when the axis has no place for them. */
@@ -280,7 +280,11 @@ export function categoryMarks(
   field: readonly RaceResultRow[],
   ourPlates: ReadonlySet<string>,
 ): FieldMark[] {
-  return field.map((row) => ({ pct: row.pctBack, ours: ourPlates.has(row.plate) }));
+  return field.map((row) => ({
+    pct: row.pctBack,
+    place: row.place,
+    ours: ourPlates.has(row.plate),
+  }));
 }
 
 /** One of the club's riders at this race: their result, and who they are. */
