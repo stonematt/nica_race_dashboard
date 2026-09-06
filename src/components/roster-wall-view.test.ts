@@ -11,7 +11,7 @@ import {
   describeCell,
   pctBackText,
   roundHref,
-} from './roster-wall.ts';
+} from './roster-wall-view.ts';
 
 const ROUNDS: RosterWallRound[] = [
   { roundId: 2, roundOrdinal: 2, roundName: 'Race 2' },

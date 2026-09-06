@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { RosterWallCell, RosterWallRound, RosterWallRow } from '@/lib/roster-wall.ts';
-import { buildRosterWallColumns, cellMark, describeCell, pctBackText } from './roster-wall.ts';
+import { buildRosterWallColumns, cellMark, describeCell, pctBackText } from './roster-wall-view.ts';
 
 /**
  * The Roster Wall: rows are Riders on the Squad, columns are Rounds of the
