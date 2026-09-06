@@ -169,14 +169,26 @@ export const individualResult = pgTable(
     /** The category string exactly as published, spelling defects included
      *  ("HS2 Boys- South", "HS2 Girl - South"). Never key on this. */
     categoryRaw: text('category_raw').notNull(),
-    /** Normalized triple, plus conference split out. Key on these. */
+    /**
+     * The whole canonical category ("HS2 Girls"), not a level token —
+     * `v_individual_result` coalesces this column as the canonical `category`
+     * every other view reads. Writing a bare level here ("HS2") would
+     * collapse HS1/HS2/HS3 into one bucket everywhere that category is used.
+     */
     categoryLevel: text('category_level'),
+    /** Grade band and gender, normalized. Key on these plus categoryLevel. */
     categoryGradeBand: text('category_grade_band'),
     categoryGender: text('category_gender'),
     conference: text('conference'),
     /** Place as published: an integer, or "*" for a DNF. Verbatim. */
     place: text('place').notNull(),
-    /** finished | lapped | dnf. No DQ, no DNS — zero of each in a full season. */
+    /**
+     * finished | dnf — the only values ingest ever writes. No DQ, no DNS —
+     * zero of each in a full season. Lapped-ness is not a value of this
+     * column: it needs the category's leading lap count, which no single row
+     * carries, so `v_race_result` derives it as a separate `is_lapped`
+     * boolean rather than a third status here.
+     */
     status: text('status').notNull(),
     /** "[H:]MM:SS.cc", or "DNF". Verbatim. */
     timeRaw: text('time_raw').notNull(),
