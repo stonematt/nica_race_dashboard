@@ -65,7 +65,7 @@ _Avoid_: Race — ambiguous between Round and Event; say which.
 
 **Start**:
 A Rider having a result row at a Round. Valuable in itself — the league gates State
-Champs eligibility on starts, not placings. A non-start is the *absence* of a row, so it
+Champs eligibility on starts, not placings. A non-start is the _absence_ of a row, so it
 is visible only by crossing the Club roster against the Rounds.
 
 **Level**:

@@ -1,14 +1,43 @@
 # bike_race_results
 
-A race dashboard for the **Salem Composite Descenders**, an Oregon Interscholastic Cycling League (NICA) composite team.
+An analytics environment for interscholastic mountain bike race results, built for the **Salem Composite Descenders** in the Oregon Interscholastic Cycling League (NICA).
 
-It pulls race results from the RaceResult timing API, normalizes them across races and seasons, and gives coaches the views the official results pages don't: how one rider has progressed, how the club stacks up against the league, and what a squad did on a given Sunday.
+It ingests what the league published, normalizes it across races and seasons, and lets a coach drill in two directions the official results pages don't support: **who** — conference, scoring team, club, squad, rider — and **when** — one round, a season, a career.
 
 The done-condition: _a race posts on a Sunday night and a coach opens the app to see how their riders did._
 
+**What this is not: team management.** Messaging, calendars, practice plans and volunteer coordination belong to a separate project. This repo is the read model of record for what happened on course; results flow out to that project, and roster or scheduling data never flows in here as truth.
+
+## The shape of the domain
+
+The domain looks like one hierarchy and is not. There are **two trees, joined at scoring team**:
+
+```
+League tree (theirs, read-only)      Club tree (ours, editable)
+  league                               club
+    conference                           squad
+      scoring team  <--- joined --->  scoring team
+        rider                              rider
+```
+
+A club spans several scoring teams, and which ones changes each season — so club cannot sit inside the league's tree without becoming season-scoped and breaking every cross-season view. Two words that look interchangeable are not: **conference** is the league's geographic split (North/South), while **division** is NICA's team-scoring bracket, an attribute of a team's result rather than a level of anything.
+
+Crossed with time, every view in the app is a cell in one grid:
+
+|            | one round       | season to date  | across seasons |
+| ---------- | --------------- | --------------- | -------------- |
+| conference | field context   | standings       | —              |
+| club       | the club's day  | the club's arc  | —              |
+| squad      | the squad's day | the squad's arc | —              |
+| rider      | the ride        | progression     | career         |
+
+Season is the **frame**, not a filter — club membership is season-keyed, so "all seasons at once" is not a well-defined club. The unit on the time axis is the **round**, not the event: one round can be two events when the conferences race separately.
+
 ## Ground rules
 
-**NICA is the scoring authority.** Points, places, ranks, and season totals are ingested verbatim and displayed as published. This app never computes or re-ranks a score. Where the published numbers look wrong, the app shows the published numbers.
+**NICA is the scoring authority, and the line is description versus adjudication.** We derive what is recomputable from the published rows and carries no consequence — percent back, lapped, field size, start count, percentile. We never produce what the league decides and acts on — points, place, category, State Champs eligibility. So the app will tell you a rider started three of four rounds, and will never tell you whether that makes them eligible. Where the published numbers look wrong, the app shows the published numbers.
+
+**Two orientations, both first-class.** Some riders measure a season in places and podiums; others measure it in starts and finishes. Both are well represented, and the split does not follow middle school versus high school — there are high schoolers whose season is finishing a lap. So it can never be a filter or a segment: a view that renders only place serves half the roster. This is why a result has three states rather than two — positioned, started without a comparable position (a DNF, a lapped rider, a time trial), and did not start at all.
 
 **There is no public half.** Race payloads carry the names of minors, so every route sits behind auth, and `next.config.ts` sends `noindex, nofollow, noarchive`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` on every path.
 
@@ -19,10 +48,11 @@ Early scaffolding — pre-MVP. What works today:
 - schema, migrations, and the five domain views
 - the auth gate — every route behind it, and admission re-decided on every request, not just at sign-in
 - the `migrate` and `seed` CLIs
-- the authenticated shell: a signed-in landing page and a sign-in page, on the vendored brand tokens
+- the authenticated shell, plus the race list and a race-detail page reading the domain views — squad cards and the field strip
+- live fetching in `bin/fetch.ts`, and decoding the archive into the normalized tables
 - unit suites over the admission rules, the provider wiring and the brand-token check, and integration suites over seeding and the domain views against a real in-memory Postgres
 
-What doesn't exist yet: any page that reads the database, live fetching (`bin/fetch.ts` is a stub), decoding archived payloads into the normalized tables, and the hosted-database path. The append-only raw layer is real — `node bin/normalize.ts --load-fixtures` archives the local fixture corpus into it without touching the network. Planning is charted on the issue tracker — `gh issue list --label "wayfinder:map"` finds the map, and the map holds the destination, the domain vocabulary, and the standing decisions.
+What doesn't exist yet: a way to _act_ on the unmapped-rider queue (the race page warns; nothing resolves it), any view above a single race — no rider progression, no squad page, no club-vs-field, no season — no navigation between views, and the hosted-database path. The append-only raw layer is real — `node bin/normalize.ts --load-fixtures` archives the local fixture corpus into it without touching the network. Planning is charted on the issue tracker — `gh issue list --label "wayfinder:map"` finds the map, and the map holds the destination, the domain vocabulary, and the standing decisions.
 
 ## Stack
 
@@ -88,25 +118,25 @@ Schema lives in `src/lib/db/schema.ts`; migrations in `src/lib/db/migrations/`. 
 
 ## Scripts
 
-| Command                             | What it does                                  |
-| ----------------------------------- | --------------------------------------------- |
-| `pnpm dev`                          | Next dev server, bound to `127.0.0.1`         |
-| `pnpm build` / `pnpm start`         | Production build and serve                    |
-| `pnpm test`                         | Vitest, once                                  |
-| `pnpm test:local`                   | The local-only lane, which reads the corpus   |
-| `pnpm privacy:check`                | Fail if payload-shaped data is committed      |
-| `pnpm test:watch`                   | Vitest, watching                              |
-| `pnpm typecheck`                    | `tsc --noEmit`                                |
-| `pnpm lint`                         | ESLint                                        |
-| `pnpm format` / `pnpm format:check` | Prettier                                      |
-| `pnpm brand:check`                  | Diff the vendored brand tokens against source |
-| `pnpm db:generate`                  | Generate a migration from the schema          |
-| `pnpm db:migrate`                   | Apply migrations                              |
-| `pnpm db:studio`                    | Drizzle Studio                                |
-| `pnpm seed`                         | Seed the club config and the first admin      |
-| `pnpm fetch`                        | Pull from RaceResult _(stub)_                 |
-| `pnpm normalize --load-fixtures`    | Archive the local corpus into `raw_fetch`     |
-| `pnpm normalize`                    | Decode that archive into the result tables    |
+| Command                             | What it does                                                       |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `pnpm dev`                          | Next dev server, bound to `127.0.0.1`                              |
+| `pnpm build` / `pnpm start`         | Production build and serve                                         |
+| `pnpm test`                         | Vitest, once                                                       |
+| `pnpm test:local`                   | The local-only lane, which reads the corpus                        |
+| `pnpm privacy:check`                | Fail if payload-shaped data is committed                           |
+| `pnpm test:watch`                   | Vitest, watching                                                   |
+| `pnpm typecheck`                    | `tsc --noEmit`                                                     |
+| `pnpm lint`                         | ESLint                                                             |
+| `pnpm format` / `pnpm format:check` | Prettier                                                           |
+| `pnpm brand:check`                  | Diff the vendored brand tokens against source                      |
+| `pnpm db:generate`                  | Generate a migration from the schema                               |
+| `pnpm db:migrate`                   | Apply migrations                                                   |
+| `pnpm db:studio`                    | Drizzle Studio                                                     |
+| `pnpm seed`                         | Seed the club config and the first admin                           |
+| `pnpm fetch`                        | Pull from RaceResult — live network, read `docs/fixtures.md` first |
+| `pnpm normalize --load-fixtures`    | Archive the local corpus into `raw_fetch`                          |
+| `pnpm normalize`                    | Decode that archive into the result tables                         |
 
 ## Testing
 
@@ -140,6 +170,8 @@ minors' names from a live API. The workflow says so at the top of the file, and
 Branching runs feature → `dev` → `main`. Feature branches (`feat/*`, `fix/*`) cut from `dev` and PR back into it; `dev` PRs into `main` for a release. Nothing lands on `main` directly.
 
 Work is tracked as GitHub issues on `stonematt/bike_race_results`. The triage vocabulary and the agent conventions are documented in `docs/agents/`.
+
+Before designing anything, read three files. [`CONTEXT.md`](CONTEXT.md) is the glossary and is authoritative on domain words — get `conference` and `division` wrong and the model goes with it. [`docs/adr/`](docs/adr/) holds the decisions that are expensive to reverse. [`docs/ux/moments.md`](docs/ux/moments.md) carries the who-by-when frame, the seven moments a coach moves through, and the job stories each view answers. The wayfinder map (`gh issue list --label "wayfinder:map"`) holds what is still foggy.
 
 Read [`docs/brand.md`](docs/brand.md) before building any UI. It holds the rules that constrain code — ink on orange and never white, orange as a highlight rather than a field, navy ground for the banner — plus the fonts, the asset policy, and how to reskin the app for another club. The tokens themselves are vendored into the `@theme` block of `src/app/globals.css` and covered by unit tests, so everything you need is in this repo; `pnpm brand:check` diffs the copy against the upstream design system for whoever has it, and exits 0 for everyone who doesn't.
 

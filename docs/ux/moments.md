@@ -11,7 +11,7 @@ decisions themselves live in `CONTEXT.md` and ADRs 0001-0002.
 
 Every view is a cell in a grid of **who** by **when**.
 
-The *who* axis is two trees, not one, joined at Scoring Team (ADR-0002):
+The _who_ axis is two trees, not one, joined at Scoring Team (ADR-0002):
 
 ```
 League tree (theirs, read-only)      Club tree (ours, editable)
@@ -21,14 +21,14 @@ League tree (theirs, read-only)      Club tree (ours, editable)
         rider                              rider
 ```
 
-The *when* axis is three scales, with Season as the ambient frame rather than a filter:
+The _when_ axis is three scales, with Season as the ambient frame rather than a filter:
 
-|  | one round | season to date | across seasons |
-| --- | --- | --- | --- |
-| conference | field context | standings, read verbatim | — |
-| club | the club's day | the club's arc | — |
-| squad | the squad's day | the squad's arc | — |
-| rider | the ride | progression | career |
+|            | one round       | season to date           | across seasons |
+| ---------- | --------------- | ------------------------ | -------------- |
+| conference | field context   | standings, read verbatim | —              |
+| club       | the club's day  | the club's arc           | —              |
+| squad      | the squad's day | the squad's arc          | —              |
+| rider      | the ride        | progression              | career         |
 
 Two rules fall out of the frame:
 
@@ -47,15 +47,15 @@ movement on either axis. That, not styling, is why it reads as a dead end.
 
 Seven moments. An analytic cycle, not a race-day clock.
 
-| # | Moment | Trigger | The question in a coach's head |
-| --- | --- | --- | --- |
-| **M0** | Reconcile | New plates arrive with an ingest | "Who is this, and have I seen them before?" |
-| **M1** | Results land | A race posts | "What happened?" |
-| **M2** | Rider read | A rider asks, or a coach preps the conversation | "Is this kid moving?" |
-| **M3** | Squad read | Weekly, per squad coach | "How is my group?" |
-| **M4** | Field read | After a good or a bad day | "Were we good, or was the field weak?" |
-| **M5** | Season read | Mid and late season | "Where is this season going?" |
-| **M6** | Season close | Season end, and the next pre-season | "What did we do, and who is back?" |
+| #      | Moment       | Trigger                                         | The question in a coach's head              |
+| ------ | ------------ | ----------------------------------------------- | ------------------------------------------- |
+| **M0** | Reconcile    | New plates arrive with an ingest                | "Who is this, and have I seen them before?" |
+| **M1** | Results land | A race posts                                    | "What happened?"                            |
+| **M2** | Rider read   | A rider asks, or a coach preps the conversation | "Is this kid moving?"                       |
+| **M3** | Squad read   | Weekly, per squad coach                         | "How is my group?"                          |
+| **M4** | Field read   | After a good or a bad day                       | "Were we good, or was the field weak?"      |
+| **M5** | Season read  | Mid and late season                             | "Where is this season going?"               |
+| **M6** | Season close | Season end, and the next pre-season             | "What did we do, and who is back?"          |
 
 M1 is the spine and matches the map's done-condition. M2-M4 hang off it. M0 precedes all
 of them and is the only moment where the coach writes; M5 and M6 have no representation in
@@ -63,7 +63,7 @@ the app at all today.
 
 ## Job stories
 
-Form: *When [situation], I want [motivation], so I can [outcome].*
+Form: _When [situation], I want [motivation], so I can [outcome]._
 
 ### M0 — Reconcile
 
@@ -135,13 +135,13 @@ does that the league tree cannot, and it is why Start count is a first-class sea
 
 ## Scope
 
-| In | Out — belongs to Outspoke |
-| --- | --- |
-| Results ingest and normalisation across rounds and seasons | Messaging |
-| The two trees, and movement between them | Calendars, practice management |
-| Round, season and cross-season analytics | Volunteer coordination |
-| Published standings, read never computed | Race-day schedules, waves, staging |
-| Rider identity, for attributing results | Family accounts |
+| In                                                         | Out — belongs to Outspoke          |
+| ---------------------------------------------------------- | ---------------------------------- |
+| Results ingest and normalisation across rounds and seasons | Messaging                          |
+| The two trees, and movement between them                   | Calendars, practice management     |
+| Round, season and cross-season analytics                   | Volunteer coordination             |
+| Published standings, read never computed                   | Race-day schedules, waves, staging |
+| Rider identity, for attributing results                    | Family accounts                    |
 
 This repo is the read model of record for what happened on course. Results flow out to
 Outspoke; roster and scheduling never flow in as truth. `rider.id` is the shared key.
@@ -190,5 +190,5 @@ frame: squads are the club's real internal unit.
 A separate critique of a printed race-day schedule was reviewed and found to be mostly
 about logistics, which is Outspoke's scope, not this repo's. One thing crossed the
 boundary: race-day call-ups are made on last season's results. That is logistics
-*consuming* results, and it is an argument for M6 holding a season whole — not a feature
+_consuming_ results, and it is an argument for M6 holding a season whole — not a feature
 here.
