@@ -20,7 +20,8 @@
  *     `DATABASE_URL=... pnpm seed` still overrides the file; and
  *   - it throws `ENOENT` on a missing file, which is what the existence check
  *     below is for. Having no `.env.local` is a supported state — `db:migrate`
- *     has to keep working from its `./.pglite` default on a fresh clone.
+ *     has to keep working on a fresh clone, from the default in
+ *     `src/lib/db/url.ts`.
  */
 
 import * as fs from 'node:fs';
@@ -40,13 +41,4 @@ export function loadEnvLocal(root: string = repoRoot): string | undefined {
   if (!fs.existsSync(file)) return undefined;
   process.loadEnvFile(file);
   return file;
-}
-
-/**
- * Where the database lives. PGlite writes `./.pglite` as a directory, and that
- * default is what lets a fresh clone migrate and seed with no configuration at
- * all — so it is the one variable whose absence is never a failure.
- */
-export function databaseUrl(env: Record<string, string | undefined> = process.env): string {
-  return env.DATABASE_URL ?? './.pglite';
 }

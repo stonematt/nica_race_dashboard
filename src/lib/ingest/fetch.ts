@@ -58,6 +58,7 @@
 
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import * as schema from '../db/schema.ts';
+import { resolveDatabaseUrl } from '../db/url.ts';
 import { isRecord } from '../is-record.ts';
 import {
   configUrl,
@@ -319,7 +320,7 @@ export function readFetchConfig(env: Record<string, string | undefined>): FetchC
     userAgent: env.FETCH_USER_AGENT ?? USER_AGENT,
     // The same default `bin/normalize.ts` uses, so the two halves of ingest
     // land in one database without either being told about it.
-    databaseUrl: env.DATABASE_URL ?? './.pglite',
+    databaseUrl: resolveDatabaseUrl(env),
     allowRefetch: env.FETCH_ALLOW_REFETCH === '1',
   };
 }

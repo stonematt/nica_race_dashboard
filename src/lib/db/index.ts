@@ -11,6 +11,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import * as schema from './schema.ts';
+import { resolveDatabaseUrl } from './url.ts';
 
 export type Database = ReturnType<typeof createDb>;
 
@@ -19,7 +20,7 @@ export function isHostedUrl(url: string): boolean {
   return url.startsWith('postgres://') || url.startsWith('postgresql://');
 }
 
-export function createDb(url = process.env.DATABASE_URL ?? './.pglite') {
+export function createDb(url = resolveDatabaseUrl()) {
   if (isHostedUrl(url)) {
     // Deliberately not wired yet: nothing is hosted, and an untested Neon path
     // that silently half-works is worse than one that says so. The swap is

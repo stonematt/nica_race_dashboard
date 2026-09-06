@@ -15,9 +15,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { databaseUrl, loadEnvLocal } from '../../bin/env.ts';
+import { loadEnvLocal } from '../../bin/env.ts';
 import { ClubConfigError, loadClubConfig, pseudonymFor, type ClubConfig } from './club-config.ts';
 import { createTestDb, type TestDatabase } from './db/testing.ts';
+import { resolveDatabaseUrl } from './db/url.ts';
 import * as schema from './db/schema.ts';
 import {
   ClubMismatchError,
@@ -275,7 +276,7 @@ describe('the bin/ bootstrap environment', () => {
 
   it('treats a missing .env.local as a supported state, so db:migrate still has a database', () => {
     expect(loadEnvLocal(dir)).toBeUndefined();
-    expect(databaseUrl()).toBe('./.pglite');
+    expect(resolveDatabaseUrl()).toBe('./.pglite');
   });
 
   it('lets a variable already in the environment beat the file', () => {
@@ -284,7 +285,7 @@ describe('the bin/ bootstrap environment', () => {
 
     loadEnvLocal(dir);
 
-    expect(databaseUrl()).toBe('./from-shell');
+    expect(resolveDatabaseUrl()).toBe('./from-shell');
   });
 
   /**
