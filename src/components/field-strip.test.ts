@@ -209,6 +209,56 @@ describe('paint order', () => {
   });
 });
 
+/*
+ * Issue #74. `buildFieldStrip` used to sort only on `ours`, a stable sort, so
+ * every other dot inherited the caller's own array order — a contract the
+ * module never stated. It now sorts by `place` itself, within each of the
+ * `ours` groups, so a future caller (the wall, the Category view) gets a
+ * correct dot order without pre-sorting.
+ */
+describe('dot order by place (#74)', () => {
+  it('sorts 10 after 2, not lexically before it', () => {
+    // Places arrive in an order that would put "10" first if sorted lexically
+    // or left in input order. By place, "2" must come first.
+    const model = buildFieldStrip([
+      { pct: 20, ours: false, place: '10' },
+      { pct: 4, ours: false, place: '2' },
+    ]);
+    expect(model.dots.map((d) => d.x)).toEqual([4 / 20, 20 / 20]);
+  });
+
+  it('sends a non-numeric or missing place to the back, after every numeric place', () => {
+    const model = buildFieldStrip([
+      { pct: 5, ours: false, place: '*' },
+      { pct: 30, ours: false, place: '10' },
+      { pct: 4, ours: false, place: '2' },
+      { pct: 6, ours: false }, // no place at all
+    ]);
+    // Numeric places first, ascending; the two unplaceable-by-place marks
+    // follow, in the order they were given (stable sort over a tie).
+    expect(model.dots.map((d) => d.x)).toEqual([4 / 30, 30 / 30, 5 / 30, 6 / 30]);
+  });
+
+  it('still paints ours last even when place order would put it first', () => {
+    const model = buildFieldStrip([
+      { pct: 40, ours: false, place: '9' },
+      { pct: 5, ours: true, place: '1' },
+    ]);
+    expect(model.dots.map((d) => d.ours)).toEqual([false, true]);
+  });
+
+  it('reproduces the pre-#74 order when no mark carries a place, unchanged', () => {
+    // Today's only caller never sets `place`; every mark ties, and the stable
+    // sort keeps its own input order — the exact behavior before this change.
+    const model = buildFieldStrip([
+      { pct: 5, ours: true },
+      { pct: 1, ours: false },
+      { pct: 9, ours: false },
+    ]);
+    expect(model.dots.map((d) => d.ours)).toEqual([false, false, true]);
+  });
+});
+
 describe('the accessible description', () => {
   it('says what the strip shows, including who is marked', () => {
     const model = buildFieldStrip(
