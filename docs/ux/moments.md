@@ -34,8 +34,10 @@ Two rules fall out of the frame:
 
 - **Move one axis at a time.** A screen offers a step sideways (who) or a step out (when).
   Nothing else. The single most important move in the app is the crossing from the club
-  tree to the league tree — "my squad" to "versus the field" — and it happens at Scoring
-  Team.
+  tree to the league tree — "my squad" to "versus the field" — and it is joined at Scoring
+  Team. Scoring Team is where the two trees _join_ (ADR-0002); the coach-flow session named
+  where the move actually _lands_, which is a Rider's **Category** at a Round, the peer set
+  the league ranked her in. Not "Club → Conference", which was never a real move.
 - **Round, not event, is the unit of time.** One Round can be two Events when the
   conferences race separately. Plot events and two riders land at different x-positions
   for the same race.
@@ -47,23 +49,36 @@ movement on either axis. That, not styling, is why it reads as a dead end.
 
 Seven moments. An analytic cycle, not a race-day clock.
 
-| #      | Moment       | Trigger                                         | The question in a coach's head              |
-| ------ | ------------ | ----------------------------------------------- | ------------------------------------------- |
-| **M0** | Reconcile    | New plates arrive with an ingest                | "Who is this, and have I seen them before?" |
-| **M1** | Results land | A race posts                                    | "What happened?"                            |
-| **M2** | Rider read   | A rider asks, or a coach preps the conversation | "Is this kid moving?"                       |
-| **M3** | Squad read   | Weekly, per squad coach                         | "How is my group?"                          |
-| **M4** | Field read   | After a good or a bad day                       | "Were we good, or was the field weak?"      |
-| **M5** | Season read  | Mid and late season                             | "Where is this season going?"               |
-| **M6** | Season close | Season end, and the next pre-season             | "What did we do, and who is back?"          |
+| #       | Moment             | Trigger                                         | The question in a coach's head              |
+| ------- | ------------------ | ----------------------------------------------- | ------------------------------------------- |
+| **M0**  | Reconcile          | New plates arrive with an ingest                | "Who is this, and have I seen them before?" |
+| **M1**  | Results land       | A race posts                                    | "What happened?"                            |
+| **M2**  | Rider read         | A rider asks, or a coach preps the conversation | "Is this kid moving?"                       |
+| **M3**  | Squad read         | Weekly, per squad coach                         | "How is my group?"                          |
+| **M4a** | Field read — rider | A rider asks where she stood                    | "Where was I in my Category?"               |
+| **M4b** | Field read — club  | After a good or a bad day                       | "Were we good, or was the field weak?"      |
+| **M5**  | Season read        | Mid and late season                             | "Where is this season going?"               |
+| **M6**  | Season close       | Season end, and the next pre-season             | "What did we do, and who is back?"          |
 
 M1 is the spine and matches the map's done-condition. M2-M4 hang off it. M0 precedes all
 of them and is the only moment where the coach writes; M5 and M6 have no representation in
 the app at all today.
 
+**M4 splits in two** (coach-flow session, 2026-09-06), because the two halves are answerable
+on different instruments and should never share a ticket. **M4a** is the rider in her
+Category — athlete-originated, reachable off a single cell, and the most-wanted view in the
+app. **M4b** is the club set against another Conference, which Percent Back cannot honestly
+answer: it is measured against your own Conference's Category winner through Round 4, so two
+riders at 8% back are behind different people. The honest instrument is raw time on a shared
+course, and both Conferences ride the same venue on the same day only at Race 1 and Race 5.
+So M4b is late-season, coach-only, and answerable at two Rounds.
+
 ## Job stories
 
 Form: _When [situation], I want [motivation], so I can [outcome]._
+
+Story numbers are stable ids and are cited by number elsewhere, so the M4 split left 10
+sitting above 9 rather than renumbering them.
 
 ### M0 — Reconcile
 
@@ -96,12 +111,22 @@ already finds the queue and the race page already warns about it; nothing yet ac
 8. When I run one squad, I want its riders framed together across a round and across the
    season, so I can see movement inside the group I actually coach.
 
-### M4 — Field read
+### M4a — Field read, rider
+
+10. When a rider asks where she stood, I want her Category at that Round with her row
+    anchored in it and the field size stated, so the comparison she gets is the one the
+    league actually ranked her in — and so it is obvious who is included and who is not,
+    and a comparison that drops half a field reads as a filter rather than a bug.
+
+### M4b — Field read, club
 
 9. When we have a strong day, I want the club placed against its conference in that same
-   round, so I can tell a strong club from a weak field.
-10. When I compare clubs, I want it obvious who is included and who is not, so a
-    comparison that drops half a roster reads as a filter rather than a bug.
+   round, so I can tell a strong club from a weak field. **Has no home in the chosen flow
+   and is a named loss** — it wants a club-level crossing, which is a later surface rather
+   than a notch on the scope control. Watch the source: the 2026 payload
+   (`fixtures/2026/config-418436.json`) advertises three lists and no Team Results list,
+   where 2025 carried two team lists plus a season overall. If that holds through the
+   season, this story has nothing to read from.
 
 ### M5 — Season read
 
@@ -119,14 +144,21 @@ already finds the queue and the race page already warns about it; nothing yet ac
 
 ## Three states, everywhere
 
-Percent Back is null for a DNF, for a lapped rider, and for everyone in a time trial. A
-season trend built on it therefore has holes by construction — and the rider most likely
-to have them is the finish-focused rider, not the podium chaser. So a rider's mark is
-never present-or-missing. It is one of three:
+Percent Back is null for a DNF and for a lapped rider. A season trend built on it
+therefore has holes by construction — and the rider most likely to have them is the
+finish-focused rider, not the podium chaser. So a rider's mark is never
+present-or-missing. It is one of three:
 
 - **positioned** — has a Percent Back
-- **started, no comparable position** — DNF, lapped, or a time trial
+- **started, no comparable position** — DNF or lapped
 - **did not start** — no result row at all
+
+The middle state narrowed on 2026-09-06: the Prologue is chip-timed with a real podium
+and a comparable time, so it is not a hole at x=1 but the season's cleanest Percent Back
+and the natural first point of every rider's arc. **Watch the cost.** With Percent Back
+comparable at every Round, the cell of any grid _can_ carry magnitude instead of a mark.
+The three-state mark was doing protective work for the finish-oriented half of the
+roster; do not spend it just because the data now allows it.
 
 The third is invisible in league data: a non-starter simply has no row. It is legible only
 by crossing the season's Roster against the Rounds. That is the first job the club tree

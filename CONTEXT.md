@@ -35,9 +35,21 @@ attribute of a team's result at an event, sitting beside place and points. Not a
 of either tree.
 _Avoid_: Conference.
 
+**Category**:
+The league's raced-and-ranked group: Level plus grade band plus gender, and — through
+Round 4 — Conference ("HS2 Girls – North"). Published as one contest per Event; the
+league's own fields are `CategoryRank` and the contest name. The peer set a Rider is
+ranked in, and the denominator of Percent Back. **Conference-scoped at Rounds 1–4,
+league-wide at State Champs**: the 2025 Prologue ran 28 contests carrying the conference
+in the name, State Champs ran 14 without it.
+_Avoid_: class, group, division.
+
 **Club**:
 The organization a coach runs. Spans one or more Scoring Teams, and which ones changes
-per season. When a coach says "team", they mean this.
+per season. When a coach says "team", they mean this. **A Club belongs to exactly one
+Conference per Season** — a league invariant, not a trait of this club — and every
+Scoring Team it spans sits inside that Conference. So through Round 4 the far side of
+the crossing is always the Club's own Conference, with no branch to handle.
 
 **Squad**:
 A coach-owned grouping of riders inside a Club, cutting across Scoring Teams.
@@ -55,12 +67,15 @@ A racing year. The frame every view sits inside — not a filter, because Club m
 is season-keyed and a Club is a different set of Scoring Teams each year.
 
 **Round**:
-The league's own race numbering within a season (Race 1..4, then State Champs). The unit
-of the time axis. One Round can be two Events when the conferences race separately.
+A race weekend in the league's own numbering (Race 1..5, State Champs last). The unit of
+the time axis. Published as one Event per Conference — or as a single Event when the
+whole league rides together, at the Prologue and at State Champs. The 2025 season was
+five Rounds across eight Events.
 
 **Event**:
 A single published race at one venue. What the results are ingested from.
-_Avoid_: Race — ambiguous between Round and Event; say which.
+_Avoid_: Race when you mean Event — that is the ambiguity. "Race N" is the league's own
+published label for a Round and is fine on screen.
 
 ### Outcomes
 
@@ -75,8 +90,12 @@ because the sources treat the two differently: team results are high-school only
 season individual standings cover both.
 
 **Percent Back**:
-How far behind the category's winner a Rider finished, as a percentage. The form metric.
-Null for a DNF, a lapped rider, and everyone in a time trial.
+How far behind the Category's winner a Rider finished, as a percentage. The form metric.
+Null for a DNF and for a lapped rider. Measured within Category, so it is **not**
+comparable across Conferences: through Round 4 two riders at 8% back are each 8% behind
+a different person. The Prologue is not an exception — it is chip-timed with a real
+podium and a comparable time, so Percent Back works there, and it is the cleanest
+reading of the season.
 
 **Season Points**:
 The league's published season standing totals. The standing metric. Read verbatim,

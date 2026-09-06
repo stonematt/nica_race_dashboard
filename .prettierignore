@@ -5,3 +5,8 @@ src/lib/db/migrations/
 .claude/
 next-env.d.ts
 LICENSE
+
+# The coach-flow option boards: 525 KB of self-contained generated HTML with the
+# fonts inlined. It is a design record read in a browser, never hand-edited, and
+# reformatting it produces a diff the size of the file.
+docs/ux/coach-flow-boards.html
