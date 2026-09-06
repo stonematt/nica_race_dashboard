@@ -8,14 +8,19 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { GENDERS, GRADE_BANDS } from '../lib/ingest/category.ts';
 import {
+  buildSquadCard,
   categoryMarks,
+  categoryRank,
   chips,
   fieldPosition,
+  fieldsByCategory,
   headline,
   lapDisplay,
   lapsDownText,
   outsideFor,
+  placeRank,
   riderCard,
   squadSummary,
   stats,
@@ -235,5 +240,117 @@ describe('the category field handed to the strip', () => {
     expect(marks.filter((m) => m.ours)).toHaveLength(2);
     // The lapped rider is ours AND unplaceable — both facts survive the trip.
     expect(marks[1]).toEqual({ pct: null, ours: true });
+  });
+});
+
+/**
+ * Card order (issue #61).
+ *
+ * The page used to render whatever order the database happened to return. These
+ * tests scramble the input on purpose: a comparator that is a total order gives
+ * the same answer whatever it is handed, and that is the whole property.
+ */
+describe('card order is decided here, not by the database', () => {
+  const entry = (over: Partial<RaceResultRow>, name: string) => ({ row: row(over), name });
+
+  /** The order the cards come out in, as plates. */
+  const plates = (entries: readonly { row: RaceResultRow; name: string }[]) =>
+    buildSquadCard('Descenders', entries, new Map()).riders.map((r) => r.card.plate);
+
+  it('sorts a category by finishing place, with 10 after 2', () => {
+    const scrambled = [
+      entry({ plate: '10', place: '10' }, '«RIDER-C»'),
+      entry({ plate: '01', place: '1' }, '«RIDER-A»'),
+      entry({ plate: '02', place: '2' }, '«RIDER-B»'),
+    ];
+    expect(plates(scrambled)).toEqual(['01', '02', '10']);
+  });
+
+  it('puts a DNF last in its category, behind every finisher', () => {
+    const scrambled = [
+      entry({ plate: '928', place: '*', status: 'dnf' }, '«RIDER-C»'),
+      entry({ plate: '930', place: '10' }, '«RIDER-B»'),
+      entry({ plate: '974', place: '1' }, '«RIDER-A»'),
+    ];
+    expect(plates(scrambled)).toEqual(['974', '930', '928']);
+  });
+
+  it('orders a category of nothing but DNFs, repeatably', () => {
+    const dnfs = [
+      entry({ plate: '928', place: '*', status: 'dnf' }, '«RIDER-C»'),
+      entry({ plate: '204', place: 'DNF', status: 'dnf' }, '«RIDER-A»'),
+      entry({ plate: '886', place: '', status: 'dnf' }, '«RIDER-B»'),
+    ];
+    // By name, then plate — arbitrary as a choice, defined as a rule.
+    expect(plates(dnfs)).toEqual(['204', '886', '928']);
+    expect(plates([...dnfs].reverse())).toEqual(['204', '886', '928']);
+  });
+
+  it('keeps each category contiguous, in the order the league ranks them', () => {
+    const scrambled = [
+      entry({ plate: '3', category: 'Varsity Girls', place: '1' }, '«RIDER-E»'),
+      entry({ plate: '2', category: 'HS1 Boys', place: '2' }, '«RIDER-C»'),
+      entry({ plate: '5', category: 'MS2 Girls', place: '1' }, '«RIDER-A»'),
+      entry({ plate: '1', category: 'HS1 Boys', place: '1' }, '«RIDER-B»'),
+      entry({ plate: '4', category: 'HS1 Girls', place: '1' }, '«RIDER-D»'),
+    ];
+    // MS2 < HS1 < Varsity, Boys before Girls, and the two HS1 Boys stay together.
+    expect(plates(scrambled)).toEqual(['5', '1', '2', '4', '3']);
+  });
+
+  it('sends a category it does not recognize to the end rather than dropping it', () => {
+    const scrambled = [
+      entry({ plate: '9', category: 'Tandem Unicycle', place: '1' }, '«RIDER-B»'),
+      entry({ plate: '1', category: 'MS1 Boys', place: '1' }, '«RIDER-A»'),
+    ];
+    expect(plates(scrambled)).toEqual(['1', '9']);
+  });
+
+  it('leaves the caller its own array', () => {
+    const entries = [
+      entry({ plate: '930', place: '10' }, '«RIDER-B»'),
+      entry({ plate: '974', place: '1' }, '«RIDER-A»'),
+    ];
+    plates(entries);
+    expect(entries.map((e) => e.row.plate)).toEqual(['930', '974']);
+  });
+
+  it('orders each category field by place too, so the strip is deterministic', () => {
+    const field = [
+      row({ plate: '928', place: '*', status: 'dnf' }),
+      row({ plate: '930', place: '10' }),
+      row({ plate: '974', place: '1' }),
+      row({ plate: '502', category: 'HS2 Girls', place: '2' }),
+      row({ plate: '501', category: 'HS2 Girls', place: '1' }),
+    ];
+    const byCategory = fieldsByCategory(field);
+    expect(byCategory.get('HS1 Boys')!.map((r) => r.place)).toEqual(['1', '10', '*']);
+    expect(byCategory.get('HS2 Girls')!.map((r) => r.place)).toEqual(['1', '2']);
+  });
+});
+
+describe('the sort keys, on their own', () => {
+  it('reads the published place as a number and never re-derives one', () => {
+    expect(placeRank('2')).toBe(2);
+    expect(placeRank('10')).toBe(10);
+    expect(placeRank(' 7 ')).toBe(7);
+  });
+
+  it('sends every place it cannot read to the back, rather than guessing', () => {
+    for (const unplaceable of ['*', 'DNF', '', '-', '3rd', '1.5']) {
+      expect(placeRank(unplaceable)).toBe(Number.POSITIVE_INFINITY);
+    }
+  });
+
+  it('ranks exactly the fourteen the league publishes, in the league order', () => {
+    // The pin. `CATEGORY_SEQUENCE` is a second copy of a vocabulary that lives
+    // in `ingest/category.ts`, and this is what keeps the two from drifting: a
+    // band added to the league that never reached the page fails here.
+    const league = GRADE_BANDS.flatMap((band) => GENDERS.map((gender) => `${band} ${gender}`));
+    expect(league.map(categoryRank)).toEqual(league.map((_, rank) => rank));
+  });
+
+  it('sorts a category the league does not publish behind all fourteen', () => {
+    expect(categoryRank('Tandem Unicycle')).toBe(GRADE_BANDS.length * GENDERS.length);
   });
 });

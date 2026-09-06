@@ -18,6 +18,16 @@ let db: TestDatabase;
 const EVENT_ID = 1;
 const SOURCE_EVENT_ID = '363499';
 
+/**
+ * The same nineteen results, inserted in a deliberately shuffled order.
+ *
+ * A re-normalize, a roster edit or the move to hosted Postgres is free to hand
+ * the view its rows in any order at all. This event is that, made explicit:
+ * whatever it renders must match what `SOURCE_EVENT_ID` renders (issue #61).
+ */
+const SCRAMBLED_EVENT_ID = 2;
+const SCRAMBLED_SOURCE_EVENT_ID = '363500';
+
 /** (plate, place, seconds, laps, status) — HS1 Boys, twelve starters. */
 const HS1_BOYS: readonly [string, string, number | null, number, 'finished' | 'dnf'][] = [
   ['974', '1', 2829.83, 3, 'finished'], // the winner
@@ -75,6 +85,16 @@ function rows(
   }));
 }
 
+/** Deal from both ends, alternating. Deterministic, and nothing like the input. */
+function shuffle<T>(list: readonly T[]): T[] {
+  const out: T[] = [];
+  for (let lo = 0, hi = list.length - 1; lo <= hi; lo++, hi--) {
+    out.push(list[hi]!);
+    if (lo !== hi) out.push(list[lo]!);
+  }
+  return out;
+}
+
 beforeAll(async () => {
   db = await createTestDb();
 
@@ -87,9 +107,25 @@ beforeAll(async () => {
     conference: 'North',
     name: 'Race 4 - Newport Gnarnia - North',
   });
+  const published = [
+    ...rows(HS1_BOYS, 'HS1 Boys - North'),
+    ...rows(HS2_GIRLS, 'HS2 Girls - North'),
+  ];
+  await db.insert(schema.individualResult).values(published);
+
+  // The same results again, under a second event, dealt in from both ends so
+  // that no category is contiguous and no place is in order.
+  await db.insert(schema.round).values({ id: 2, seasonId: 1, ordinal: 5, name: 'Race 5' });
+  await db.insert(schema.event).values({
+    id: SCRAMBLED_EVENT_ID,
+    roundId: 2,
+    sourceEventId: SCRAMBLED_SOURCE_EVENT_ID,
+    conference: 'North',
+    name: 'Race 5 - Newport Gnarnia - North',
+  });
   await db
     .insert(schema.individualResult)
-    .values([...rows(HS1_BOYS, 'HS1 Boys - North'), ...rows(HS2_GIRLS, 'HS2 Girls - North')]);
+    .values(shuffle(published).map((r) => ({ ...r, eventId: SCRAMBLED_EVENT_ID })));
 
   // Config: one club, one scoring team, one squad, four riders — one of whom
   // raced for the club and is mapped to nobody.
@@ -136,7 +172,8 @@ describe('the race', () => {
 
   it('lists itself among the races there are to open', async () => {
     const races = await listRaces(db);
-    expect(races.map((r) => r.sourceEventId)).toEqual([SOURCE_EVENT_ID]);
+    // Newest first: Race 5 is the later round.
+    expect(races.map((r) => r.sourceEventId)).toEqual([SCRAMBLED_SOURCE_EVENT_ID, SOURCE_EVENT_ID]);
   });
 });
 
@@ -237,5 +274,34 @@ describe('percent back, taken from the view and never recomputed', () => {
 describe('which club is asking', () => {
   it('falls back to the only club when the user has no coach profile', async () => {
     expect(await resolveClub(db, null)).toEqual({ id: 1, name: 'Salem Composite Descenders' });
+  });
+});
+
+describe('card order, decided by the builder rather than the query plan', () => {
+  const cardPlates = async (sourceEventId: string) =>
+    (await loadRaceDetail(db, sourceEventId, null))!.squads[0]!.riders.map((r) => r.card.plate);
+
+  it('runs the cards category by category, then by place, DNF last', async () => {
+    // HS1 Boys before HS2 Girls, and within HS1 Boys: 3rd, 11th, then the DNF.
+    expect(await cardPlates(SOURCE_EVENT_ID)).toEqual(['886', '204', '928', '503']);
+  });
+
+  it('renders the same order twice running', async () => {
+    expect(await cardPlates(SOURCE_EVENT_ID)).toEqual(await cardPlates(SOURCE_EVENT_ID));
+  });
+
+  it('renders the same order from rows inserted in a different order', async () => {
+    expect(await cardPlates(SCRAMBLED_SOURCE_EVENT_ID)).toEqual(await cardPlates(SOURCE_EVENT_ID));
+  });
+
+  it('hands the strip its field in a defined order too', async () => {
+    const page = await loadRaceDetail(db, SCRAMBLED_SOURCE_EVENT_ID, null);
+    const field = page!.squads[0]!.riders[0]!.field.map((m) => m.pct);
+
+    // Every placeable rider first, slowest last; the lapped and the DNF behind them.
+    const placed = field.filter((pct): pct is number => pct !== null);
+    expect(field.slice(0, placed.length)).toEqual(placed);
+    expect(placed).toEqual([...placed].sort((a, b) => a - b));
+    expect(field.slice(placed.length)).toEqual([null, null]);
   });
 });

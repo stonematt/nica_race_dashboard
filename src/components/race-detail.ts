@@ -19,6 +19,14 @@
  *   5. A rider on a club scoring team with **no plate mapping** appears in the
  *      warning, not silently among the cards.
  *
+ * Sixth, and a rule about arrangement rather than about a number: **the order
+ * cards come out in is decided here.** The page used to render whatever order
+ * the database returned — at 2025 Race 4 North the HS1 Boys came back 67th,
+ * 20th, 63rd, 65th (issue #61). That was stable only by accident, and a
+ * re-normalize, a roster edit or the move to hosted Postgres would have changed
+ * it silently. Category in the league's own ranking order, then finishing place
+ * ascending, then the riders the source could not place. See `compareRiders`.
+ *
  * The one thing this module never does is arithmetic on a result. Percent back,
  * the percentile, the lap deficit and the lapped flag all arrive computed from
  * `v_race_result`; place, time and points are the source's own strings. **NICA
@@ -275,16 +283,136 @@ export function categoryMarks(
   return field.map((row) => ({ pct: row.pctBack, ours: ourPlates.has(row.plate) }));
 }
 
+/** One of the club's riders at this race: their result, and who they are. */
+export type RiderEntry = { row: RaceResultRow; name: string };
+
+/**
+ * The fourteen published categories, in the order the league ranks them.
+ *
+ * Written out rather than derived from `GRADE_BANDS` and `GENDERS`, which are
+ * the same fourteen in the same order. Nothing under `src/components/` reaches
+ * into the ingest layer — that is the boundary `lapSeconds` keeps, and one
+ * constant is not worth crossing it for. The cost of a second copy is drift,
+ * and `race-detail.test.ts` pins this list against the ingest vocabulary so a
+ * band the league adds cannot quietly fail to appear here.
+ */
+const CATEGORY_SEQUENCE: readonly string[] = [
+  'MS1 Boys',
+  'MS1 Girls',
+  'MS2 Boys',
+  'MS2 Girls',
+  'MS3 Boys',
+  'MS3 Girls',
+  'HS1 Boys',
+  'HS1 Girls',
+  'HS2 Boys',
+  'HS2 Girls',
+  'HS3 Boys',
+  'HS3 Girls',
+  'Varsity Boys',
+  'Varsity Girls',
+];
+
+const CATEGORY_ORDER: ReadonlyMap<string, number> = new Map(
+  CATEGORY_SEQUENCE.map((category, rank) => [category, rank]),
+);
+
+/**
+ * Where a category sorts. Anything unrecognized goes to the end.
+ *
+ * `normalizeCategory` refuses an unknown category at ingest, so a row that
+ * reaches here with one is already an anomaly. It is still shown, and shown
+ * last, rather than dropped or thrown over: the page's job is to render what
+ * was published.
+ */
+export function categoryRank(category: string): number {
+  return CATEGORY_ORDER.get(category) ?? CATEGORY_ORDER.size;
+}
+
+/** The only shape a published string is allowed to be read as a number in. */
+const WHOLE_NUMBER = /^\d+$/;
+
+/**
+ * The published place, as a sort key — and nothing more.
+ *
+ * `place` is a text column carrying the source's own strings: `1`, `10`, and
+ * `*` for a rider it did not place. Sorting it lexically puts `10` ahead of
+ * `2`, so it is read as a number when it is one and sent to the back when it
+ * is not. **Nothing here computes or re-derives a place.** A place the source
+ * did not publish stays unpublished; it just sorts last. NICA is the scoring
+ * authority (issue #1).
+ */
+export function placeRank(place: string): number {
+  const published = place.trim();
+  return WHOLE_NUMBER.test(published) ? Number(published) : Number.POSITIVE_INFINITY;
+}
+
+/** Code-unit order. Deterministic everywhere, unlike a collation or a locale. */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Plates sort numerically when they are numbers, so `9` comes before `10`. */
+function comparePlate(a: string, b: string): number {
+  const aNum = WHOLE_NUMBER.test(a);
+  const bNum = WHOLE_NUMBER.test(b);
+  if (aNum && bNum) return Number(a) - Number(b);
+  if (aNum !== bNum) return aNum ? -1 : 1;
+  return compareText(a, b);
+}
+
+/**
+ * Two riders of the same category, by finishing place.
+ *
+ * Unplaceable riders — a DNF, and anything else the source did not number —
+ * share the same rank, so the plate breaks the tie. Both comparisons are total,
+ * which is the property that matters: the answer does not depend on the order
+ * the rows arrived in.
+ */
+export function compareByPlace(a: RaceResultRow, b: RaceResultRow): number {
+  const aPlace = placeRank(a.place);
+  const bPlace = placeRank(b.place);
+  if (aPlace !== bPlace) return aPlace < bPlace ? -1 : 1;
+  return comparePlate(a.plate, b.plate);
+}
+
+/**
+ * The order cards are rendered in: category, then place, then the name.
+ *
+ * Category first so every rider in one is contiguous and a coach scanning a
+ * squad knows where to look. Place next, ascending, which is how a result is
+ * read everywhere else in the sport. The name only settles riders the source
+ * left unplaced — all DNFs rank alike, and "alike" still has to come out the
+ * same way twice.
+ */
+export function compareRiders(a: RiderEntry, b: RiderEntry): number {
+  const aCategory = categoryRank(a.row.category);
+  const bCategory = categoryRank(b.row.category);
+  if (aCategory !== bCategory) return aCategory - bCategory;
+  // Two categories can share a rank only by both being unrecognized.
+  const named = compareText(a.row.category, b.row.category);
+  if (named !== 0) return named;
+
+  const aPlace = placeRank(a.row.place);
+  const bPlace = placeRank(b.row.place);
+  if (aPlace !== bPlace) return aPlace < bPlace ? -1 : 1;
+
+  return compareText(a.name, b.name) || comparePlate(a.row.plate, b.row.plate);
+}
+
 /** One squad's result rows, paired with the fields their strips draw against. */
 export function buildSquadCard(
   name: string,
-  entries: readonly { row: RaceResultRow; name: string }[],
+  entries: readonly RiderEntry[],
   fieldByCategory: ReadonlyMap<string, readonly RaceResultRow[]>,
 ): SquadCard {
+  // A copy: the caller's array is theirs, and `sort` is in place.
+  const ordered = [...entries].sort(compareRiders);
+
   return {
     name,
-    summary: squadSummary(entries.map((entry) => entry.row)),
-    riders: entries.map((entry) => ({
+    summary: squadSummary(ordered.map((entry) => entry.row)),
+    riders: ordered.map((entry) => ({
       card: riderCard(entry.row, entry.name),
       // A category with no field rows should not happen — the rider's own row
       // is in it — but an empty strip is a better failure than a crash on a
@@ -297,7 +425,15 @@ export function buildSquadCard(
   };
 }
 
-/** Every starter, grouped by the category they raced. */
+/**
+ * Every starter, grouped by the category they raced, each field in place order.
+ *
+ * The fields are ordered for the same reason the cards are: a strip's dots are
+ * drawn in the order they arrive, so an unordered field renders the same
+ * picture out of different markup on every re-normalize. Ordering here costs
+ * one sort and makes the whole view model a function of the rows rather than of
+ * the query plan.
+ */
 export function fieldsByCategory(rows: readonly RaceResultRow[]): Map<string, RaceResultRow[]> {
   const out = new Map<string, RaceResultRow[]>();
   for (const row of rows) {
@@ -305,5 +441,6 @@ export function fieldsByCategory(rows: readonly RaceResultRow[]): Map<string, Ra
     if (field) field.push(row);
     else out.set(row.category, [row]);
   }
+  for (const field of out.values()) field.sort(compareByPlace);
   return out;
 }
