@@ -62,6 +62,39 @@ const tally = <T extends string>(values: readonly T[]): Record<string, number> =
 const fieldCell = (rider: PlacedRider) =>
   rider.card.stats.find((stat) => stat.label === 'Field')!.value;
 
+/**
+ * The fourteen published categories, in the order the cards should run.
+ *
+ * Written out here rather than imported from the builder. A test that reuses
+ * the ordering it is checking proves only that the code agrees with itself.
+ */
+const LEAGUE_ORDER: readonly string[] = [
+  'MS1 Boys',
+  'MS1 Girls',
+  'MS2 Boys',
+  'MS2 Girls',
+  'MS3 Boys',
+  'MS3 Girls',
+  'HS1 Boys',
+  'HS1 Girls',
+  'HS2 Boys',
+  'HS2 Girls',
+  'HS3 Boys',
+  'HS3 Girls',
+  'Varsity Boys',
+  'Varsity Girls',
+];
+
+/** The published place off the card's own Place cell. `—` is a rider unplaced. */
+const placeOf = (rider: PlacedRider): number => {
+  const published = /^(\d+) \//.exec(
+    rider.card.stats.find((stat) => stat.label === 'Place')!.value,
+  );
+  return published === null ? Number.POSITIVE_INFINITY : Number(published[1]);
+};
+
+const ascending = (a: number, b: number) => (a === b ? 0 : a < b ? -1 : 1);
+
 describe('the page opens a real archived race', () => {
   it('offers every archived event', async () => {
     expect(await listRaces(db)).toHaveLength(9);
@@ -230,5 +263,41 @@ describe('the prologue has no percent-back axis at all', () => {
     expect(
       tally(rendered.map((markup) => (markup.includes(NO_AXIS_REASON) ? 'said why' : 'silent'))),
     ).toEqual({ 'said why': 25 });
+  });
+});
+
+describe('card order at a real event (issue #61)', () => {
+  it('runs each squad category by category, in the order the league ranks them', () => {
+    // The symptom: at this event the HS1 Boys came back 67th, 20th, 63rd, 65th,
+    // in whatever order the query plan happened to produce.
+    for (const squad of raceFour.squads) {
+      const categories = squad.riders.map((rider) => rider.card.category);
+      const runs = categories.filter((category, i) => category !== categories[i - 1]);
+
+      expect(runs.filter((category) => !LEAGUE_ORDER.includes(category))).toEqual([]);
+      // One run per category: nobody is stranded away from their peers.
+      expect(runs).toEqual([...new Set(categories)]);
+      expect(runs).toEqual(
+        [...runs].sort((a, b) => ascending(LEAGUE_ORDER.indexOf(a), LEAGUE_ORDER.indexOf(b))),
+      );
+    }
+  });
+
+  it('ascends by published place inside a category, the unplaced last', () => {
+    for (const squad of raceFour.squads) {
+      for (const category of new Set(squad.riders.map((rider) => rider.card.category))) {
+        const places = squad.riders
+          .filter((rider) => rider.card.category === category)
+          .map(placeOf);
+        expect(places).toEqual([...places].sort(ascending));
+      }
+    }
+  });
+
+  it('renders the same order on a second read of the same event', async () => {
+    const again = (await loadRaceDetail(db, RACE_4_NORTH, null))!;
+    expect(cards(again).map((rider) => rider.card.plate)).toEqual(
+      cards(raceFour).map((rider) => rider.card.plate),
+    );
   });
 });
