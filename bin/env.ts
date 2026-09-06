@@ -20,7 +20,8 @@
  *     `DATABASE_URL=... pnpm seed` still overrides the file; and
  *   - it throws `ENOENT` on a missing file, which is what the existence check
  *     below is for. Having no `.env.local` is a supported state — `db:migrate`
- *     has to keep working from its `./.pglite` default on a fresh clone.
+ *     has to keep working on a fresh clone, from the default in
+ *     `src/lib/db/url.ts`.
  */
 
 import * as fs from 'node:fs';

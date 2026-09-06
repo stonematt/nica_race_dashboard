@@ -11,12 +11,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DATABASE_URL, resolveDatabaseUrl } from './url.ts';
+import { resolveDatabaseUrl } from './url.ts';
 
 describe('resolveDatabaseUrl', () => {
   it('falls back to the local PGlite directory, so a fresh clone needs no configuration', () => {
     expect(resolveDatabaseUrl({})).toBe('./.pglite');
-    expect(DEFAULT_DATABASE_URL).toBe('./.pglite');
   });
 
   it('prefers what the environment says', () => {

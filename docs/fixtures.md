@@ -183,7 +183,7 @@ Two things to know before editing the format:
 | default    | `pnpm test`       | code and synthetic data only | yes        |
 | local-only | `pnpm test:local` | the real corpus              | **never**  |
 
-A test file named `*.local.test.ts` is in the local lane. The default config excludes that
+A test file named `*.local.test.ts` or `*.local.test.tsx` is in the local lane. The default config excludes that
 glob by name and `vitest.local.config.ts` is the only thing that includes it, so a
 fidelity test lands outside the default suite by construction rather than by someone
 remembering. `scripts/test-lanes.test.ts` asks vitest which files each lane collects and

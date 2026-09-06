@@ -16,9 +16,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadEnvLocal } from '../../bin/env.ts';
-import { resolveDatabaseUrl } from './db/url.ts';
 import { ClubConfigError, loadClubConfig, pseudonymFor, type ClubConfig } from './club-config.ts';
 import { createTestDb, type TestDatabase } from './db/testing.ts';
+import { resolveDatabaseUrl } from './db/url.ts';
 import * as schema from './db/schema.ts';
 import {
   ClubMismatchError,

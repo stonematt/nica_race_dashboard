@@ -22,7 +22,7 @@
  */
 
 /** The database `bin/` and the app share when `DATABASE_URL` says nothing. */
-export const DEFAULT_DATABASE_URL = './.pglite';
+const DEFAULT_DATABASE_URL = './.pglite';
 
 /**
  * `DATABASE_URL`, or the local PGlite directory when it is unset.
