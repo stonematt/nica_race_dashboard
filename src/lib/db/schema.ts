@@ -179,6 +179,8 @@ export const individualResult = pgTable(
     /** Grade band and gender, normalized. Key on these plus categoryLevel. */
     categoryGradeBand: text('category_grade_band'),
     categoryGender: text('category_gender'),
+    /** North | South, split out of the raw category's suffix ("HS2 Boys-
+     *  South"). Null where the category carries no conference. */
     conference: text('conference'),
     /** Place as published: an integer, or "*" for a DNF. Verbatim. */
     place: text('place').notNull(),
