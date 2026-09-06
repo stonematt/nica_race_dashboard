@@ -140,6 +140,26 @@ describe('the three cell states', () => {
     expect(markup).toContain('sr-only');
   });
 
+  it('crosses to her Category from a cell she started, and only from one', () => {
+    // The crossing is the one link that leaves the club tree (ADR-0002), so
+    // which cells carry it is the rule worth pinning. RIDER-A: positioned at
+    // Race 1, DNF at Race 2, absent at Race 3.
+    const markup = render();
+    expect(markup).toContain('href="/2026/round/1/category/1#her"');
+    expect(markup).toContain('href="/2026/round/2/category/1#her"');
+    expect(markup).not.toContain('/2026/round/3/category/1');
+  });
+
+  it('opens no Category for a Round she did not start', () => {
+    const single: RosterWallRow[] = [
+      { rider: { riderId: 1, riderName: '«RIDER-A»' }, cells: [absentCell] },
+    ];
+    const markup = render(single, [ROUNDS[0]!]);
+    // The column header still links to the Round page; nothing links to a
+    // Category, because there is no field she was in to open.
+    expect(markup).not.toContain('/category/');
+  });
+
   it('reads a did-not-start cell as absence, never as a bad result — no danger/warn tone', () => {
     const single: RosterWallRow[] = [
       { rider: { riderId: 1, riderName: '«RIDER-A»' }, cells: [absentCell] },

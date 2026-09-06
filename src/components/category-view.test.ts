@@ -8,7 +8,6 @@ import type { CategoryField, CategoryFieldRow } from '../lib/category.ts';
 import {
   HER_ROW_ID,
   anchorHeadline,
-  crossingHeading,
   listDescription,
   ordinal,
   rowMark,
@@ -118,12 +117,6 @@ describe('scopeStatement', () => {
 
   it('says league-wide when the Category has merged, at State Champs', () => {
     expect(scopeStatement(leagueField)).toBe('HS2 Girls — every starter across the league.');
-  });
-});
-
-describe('crossingHeading', () => {
-  it('pairs the Category with the Round it was raced at', () => {
-    expect(crossingHeading(conferenceField, 'Race 3')).toBe('HS2 Girls - North, Race 3');
   });
 });
 

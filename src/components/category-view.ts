@@ -98,11 +98,6 @@ export function scopeStatement(field: CategoryField): string {
     : `${field.categoryName} — every starter in the ${field.conference} Conference.`;
 }
 
-/** The heading line pairing the Category with the Round it was raced at. */
-export function crossingHeading(field: CategoryField, roundName: string): string {
-  return `${field.categoryName}, ${roundName}`;
-}
-
 /**
  * The screen-reader summary for the ranked list as a whole — the field size,
  * her own row (when she has one to point at), and that squad-mates are
