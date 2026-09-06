@@ -65,6 +65,13 @@ echo fixtures >> .git/info/exclude
 That makes staging it impossible without `git add -f`, the same as the copied form. See
 [#52](https://github.com/stonematt/bike_race_results/issues/52).
 
+Naming the link something else does not get you past anything: both the hook and the
+guard follow a staged symlink to wherever it resolves and refuse one that lands in
+`fixtures/` or `data/`, under any name, in this checkout or in the copy under
+`~/.local/share/`. A link they cannot resolve at all — a dangling one — is refused too,
+because an unreadable destination is not a cleared one. A link to somewhere ordinary is
+left alone. See [#58](https://github.com/stonematt/bike_race_results/issues/58).
+
 ## Why it is ignored rather than committed
 
 **This repository is public and the payloads contain minors' full names, schools, grades
@@ -80,8 +87,10 @@ with a mechanical one, not with discipline:
 
 - `.gitignore` carries `fixtures/`, which stops an ordinary `git add`
 - `scripts/git-hooks/pre-commit` reads the **index** and rejects any commit that stages a
-  path under `fixtures/`, or renames one out of it. Because it reads the index, `git add -f`
-  does not get past it, and it fails closed if it cannot read the index at all
+  path under `fixtures/`, renames one out of it, or stages a symlink that resolves into
+  `fixtures/` or `data/` whatever the link is called. Because it reads the index,
+  `git add -f` does not get past it, and it fails closed if it cannot read the index at
+  all — or a symlink's target
 - `pnpm install` runs `scripts/install-git-hooks.mjs`, which points `core.hooksPath` at
   `scripts/git-hooks`. A fresh clone is armed by its first install, with no setup step
 
@@ -100,7 +109,11 @@ the whole defence on its own, and neither is claimed to be.
 The guard reads **tracked** files only, which is why the gitignored corpus in your working
 tree does not trip it, and applies three rules:
 
-1. Nothing under `fixtures/` or `data/` is ever tracked.
+1. Nothing under `fixtures/` or `data/` is ever tracked — neither the bare path itself
+   (a symlink of that exact name is a _file_ to git, not a directory), nor a symlink under
+   any other name that **resolves** into either directory. A symlink the guard cannot
+   resolve is refused rather than cleared. The pre-commit hook carries the same two checks,
+   so the layers still agree.
 2. A tracked RaceResult-shaped payload must carry no rows — the rule that guards the
    committed shape corpus ([#31](https://github.com/stonematt/bike_race_results/issues/31)),
    so a stripper regression that starts emitting real rows fails the build instead of

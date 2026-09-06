@@ -13,7 +13,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, statSync, symlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -183,6 +183,65 @@ describe('the pre-commit hook', () => {
     // If CORPUS_DIRNAME ever moves, this fails rather than the hook silently
     // guarding a path nothing uses.
     expect(readFileSync(HOOK, 'utf8')).toContain(`:(top)${CORPUS_DIRNAME}`);
+  });
+});
+
+describe('the pre-commit hook and symlinks into the corpus', () => {
+  // #58. #52 taught the hook one name, `fixtures`, and recorded the rest as out
+  // of scope. The guard now follows a link wherever it lands, and this is the
+  // local half agreeing with it — two independent layers catching the same set
+  // was the whole point of #52 and is not allowed to regress.
+
+  it('rejects a corpus symlink staged under a name the pathspec never sees', async () => {
+    const dir = await scratchRepo();
+    // The ticket's reproduction, verbatim.
+    symlinkSync(join(dir, CORPUS_DIRNAME), join(dir, 'fixtures2'));
+    git(dir, 'add', '-f', 'fixtures2');
+
+    const commit = git(dir, 'commit', '-m', 'sneak the corpus in sideways');
+
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain('BLOCKED');
+    expect(commit.stderr).toContain('fixtures2');
+    expect(git(dir, 'log', '--oneline').stdout.trim().split('\n')).toHaveLength(1);
+  });
+
+  it('rejects a relative link from a subdirectory into a season', async () => {
+    const dir = await scratchRepo();
+    await mkdir(join(dir, 'docs'), { recursive: true });
+    symlinkSync(`../${CORPUS_DIRNAME}/2025`, join(dir, 'docs', 'nested-link'));
+    git(dir, 'add', '-f', 'docs/nested-link');
+
+    const commit = git(dir, 'commit', '-m', 'link a season from docs');
+
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain('BLOCKED');
+    expect(commit.stderr).toContain('nested-link');
+  });
+
+  it('lets an ordinary symlink through', async () => {
+    const dir = await scratchRepo();
+    await mkdir(join(dir, 'docs'), { recursive: true });
+    await writeFile(join(dir, 'docs', 'notes.md'), '# notes\n');
+    symlinkSync('docs', join(dir, 'docslink'));
+    git(dir, 'add', 'docs/notes.md', 'docslink');
+
+    const commit = git(dir, 'commit', '-m', 'link the docs directory');
+
+    expect(commit.status).toBe(0);
+    expect(git(dir, 'log', '--oneline').stdout.trim().split('\n')).toHaveLength(2);
+  });
+
+  it('fails closed on a link it cannot resolve, and says which one', async () => {
+    const dir = await scratchRepo();
+    symlinkSync('../nowhere/fixtures', join(dir, 'gone'));
+    git(dir, 'add', '-f', 'gone');
+
+    const commit = git(dir, 'commit', '-m', 'stage a dangling link');
+
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain('gone');
+    expect(commit.stderr).toMatch(/could not be resolved/);
   });
 });
 
