@@ -36,6 +36,7 @@ import {
   resolveAdminClub,
   seedAdmin,
   seedClubConfig,
+  StrandedCoachError,
 } from '../src/lib/seed.ts';
 import { databaseUrl, loadEnvLocal } from './env.ts';
 
@@ -111,12 +112,11 @@ try {
 
   process.exit(0);
 } catch (error) {
-  if (
-    error instanceof NotAllowlistedError ||
-    error instanceof ClubConfigError ||
-    error instanceof ClubMismatchError
-  ) {
-    console.error(`refused: ${error.message}`);
+  // Everything the operator can put right themselves: say what is wrong and
+  // stop, rather than showing them a stack trace for their own typo.
+  const refusals = [NotAllowlistedError, ClubConfigError, ClubMismatchError, StrandedCoachError];
+  if (refusals.some((refusal) => error instanceof refusal)) {
+    console.error(`refused: ${(error as Error).message}`);
     process.exit(1);
   }
   throw error;

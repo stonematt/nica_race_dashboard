@@ -32,7 +32,7 @@
  * first coach who can get in, not a permission level.
  */
 
-import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, ne, notInArray } from 'drizzle-orm';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import { isAllowed, type AllowlistEnv } from './allowlist.ts';
 import {
@@ -63,7 +63,8 @@ export interface SeedAdminOptions {
   env?: AllowlistEnv;
 }
 
-export interface SeedAdminResult {
+/** What the database holds for this coach once seeding has finished with it. */
+interface SeededAdmin {
   userId: string;
   /** The club the coach is on — read back from the coach row, never assumed. */
   clubId: number;
@@ -72,15 +73,27 @@ export interface SeedAdminResult {
   displayName: string;
   /** The club's name as the database holds it. */
   clubName: string;
-  /** False when the admin already existed and nothing was written. */
-  created: boolean;
-  /**
-   * The club this run asked for, when the coach turned out to be on a different
-   * one. Undefined whenever there is nothing to report, so its presence *is*
-   * the mismatch — and the caller must say so rather than print success (#62).
-   */
-  requestedClubName?: string;
 }
+
+/**
+ * A union rather than one shape with an optional field, so that the state that
+ * used to be reported wrongly cannot be built at all: a run that *created* the
+ * coach has no club to disagree with, and only the no-op branch can carry a
+ * mismatch (#62).
+ */
+export type SeedAdminResult =
+  | (SeededAdmin & { created: true })
+  | (SeededAdmin & {
+      /** The admin already existed and nothing was written. */
+      created: false;
+      /**
+       * The club this run asked for, when the coach turned out to be on a
+       * different one. Undefined when there is nothing to report, so its
+       * presence *is* the mismatch — and the caller must say so rather than
+       * print the success that did not happen.
+       */
+      requestedClubName?: string;
+    });
 
 export class NotAllowlistedError extends Error {
   constructor(email: string) {
@@ -101,6 +114,19 @@ export class ClubMismatchError extends Error {
         `Drop --club to take the name from config/club-seed.json, or change the club there.`,
     );
     this.name = 'ClubMismatchError';
+  }
+}
+
+export class StrandedCoachError extends Error {
+  constructor(configured: string, coachClub: string) {
+    super(
+      `the club config declares "${configured}", but a coach in this database is already on ` +
+        `"${coachClub}". Seeding the config would put the roster on a second club row and leave ` +
+        `that coach looking at an empty app. Set the club back to "${coachClub}" in ` +
+        `config/club-seed.json, or move the coach onto "${configured}" first — renaming a club ` +
+        `is not something seeding will do on its own.`,
+    );
+    this.name = 'StrandedCoachError';
   }
 }
 
@@ -250,6 +276,12 @@ export async function seedClubConfig(
   assertScoringTeamsPublished(config, options.publishedScoringTeams ?? loadPublishedScoringTeams());
 
   return db.transaction(async (tx) => {
+    // Before anything is written: a coach already on some other club means this
+    // config would seed the roster onto a second club row and strand them. The
+    // README's two-club bug reached that state through `--club`; editing the
+    // club name in the config reaches it from the other side (#62).
+    await assertNoStrandedCoach(tx, config.club);
+
     const seasonId = await upsertSeason(tx, config.season);
     const clubId = await upsertClub(tx, config.club);
 
@@ -424,6 +456,26 @@ async function upsertSeason(tx: Tx, year: number): Promise<number> {
  * Look up before inserting rather than upserting, so a second run reuses the
  * existing id instead of burning one from the serial sequence.
  */
+/**
+ * Refuse to seed a club config that would leave an existing coach behind.
+ *
+ * Clubs are matched by name and nothing renames one, so seeding a config whose
+ * club differs from the coach's is not an edit — it is a second club, with the
+ * roster on one row and the coach on the other. Checked here rather than in the
+ * CLI so it holds for any caller, and inside the transaction so the refusal
+ * writes nothing.
+ */
+async function assertNoStrandedCoach(executor: Executor, clubName: string): Promise<void> {
+  const stranded = await executor
+    .select({ name: schema.club.name })
+    .from(schema.coach)
+    .innerJoin(schema.club, eq(schema.coach.clubId, schema.club.id))
+    .where(ne(schema.club.name, clubName))
+    .limit(1);
+
+  if (stranded[0]) throw new StrandedCoachError(clubName, stranded[0].name);
+}
+
 async function upsertClub(executor: Executor, name: string): Promise<number> {
   const existing = await executor.select().from(schema.club).where(eq(schema.club.name, name));
   if (existing[0]) return existing[0].id;

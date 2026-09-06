@@ -25,6 +25,7 @@ import {
   resolveAdminClub,
   seedAdmin,
   seedClubConfig,
+  StrandedCoachError,
 } from './seed.ts';
 
 const env = { AUTH_ALLOWED_EMAILS: 'coach@example.org' };
@@ -146,7 +147,10 @@ describe('seedAdmin on a database that already has the coach', () => {
     const first = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
     const second = await seedAdmin(db, { email: 'coach@example.org', clubName: OTHER, env });
 
-    expect(second.created).toBe(false);
+    // Throwing rather than expect(): it narrows the result union, so the
+    // mismatch field below is only reachable on the branch that can carry it.
+    if (second.created) throw new Error('expected the existing coach, not a fresh seed');
+
     expect(second.clubName).toBe(CLUB);
     expect(second.clubId).toBe(first.clubId);
     expect(second.requestedClubName).toBe(OTHER);
@@ -164,7 +168,8 @@ describe('seedAdmin on a database that already has the coach', () => {
     await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
     const again = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
 
-    expect(again.created).toBe(false);
+    if (again.created) throw new Error('expected the existing coach, not a fresh seed');
+
     expect(again.requestedClubName).toBeUndefined();
     expect(await db.select().from(schema.club)).toHaveLength(1);
     expect(await db.select().from(schema.coach)).toHaveLength(1);
@@ -432,6 +437,20 @@ describe('seedClubConfig', () => {
     const clubs = await db.select().from(schema.club);
     expect(clubs).toHaveLength(1);
     expect(clubs[0]!.id).toBe(result.clubId);
+  });
+
+  it('refuses to seed onto a club that strands the coach already in the database', async () => {
+    // The other half of #62, reached by editing the config's club rather than
+    // by the README: the roster would land on the new name and the coach would
+    // keep the old one, which is two club rows and an empty app.
+    await seedAdmin(db, { email: 'coach@example.org', clubName: 'Salem Composite', env });
+
+    await expect(seedClubConfig(db, clubConfig({ club: 'Descenders' }))).rejects.toThrow(
+      StrandedCoachError,
+    );
+
+    const clubs = await db.select().from(schema.club);
+    expect(clubs.map((c) => c.name)).toEqual(['Salem Composite']);
   });
 
   it('drops a scoring team the config no longer lists', async () => {
