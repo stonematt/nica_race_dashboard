@@ -33,6 +33,13 @@ describe('resolveDatabaseUrl', () => {
  * Scanned rather than asserted through a call, because the thing being
  * prevented is a *new* call site — one this test could not know to import.
  *
+ * It matches the literal in any of the three quote styles, because prettier
+ * would rewrite a double-quoted copy but has nothing to say about a backtick.
+ * A copy assembled from pieces — a concatenation, or the string parked in some
+ * other constant — still escapes it, and closing that would mean parsing rather
+ * than reading. The scan is aimed at the copy someone writes by hand, which is
+ * how all three of the copies it was written for got there.
+ *
  * `drizzle.config.ts` at the repo root is knowingly outside the scan and holds
  * a fourth copy. drizzle-kit loads that config through its own bundler before
  * anything else in the project runs, and confirming a relative import survives
@@ -52,9 +59,11 @@ describe('one owner for the default', () => {
       // A test asserting on the value is not a second owner of it.
       .filter((file) => !/\.test\.tsx?$/.test(file));
 
+  const QUOTED = /(['"`])\.\/\.pglite\1/;
+
   it('spells the PGlite default in exactly one module under src/ and bin/', () => {
     const spelled = [...sources('src'), ...sources('bin')].filter((file) =>
-      fs.readFileSync(path.join(ROOT, file), 'utf8').includes(`'./.pglite'`),
+      QUOTED.test(fs.readFileSync(path.join(ROOT, file), 'utf8')),
     );
 
     expect(spelled).toEqual([OWNER]);
