@@ -22,6 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadClubConfig } from '../../../lib/club-config.ts';
 import { createTestDb, type TestDatabase } from '../../../lib/db/testing.ts';
+import { GENDERS, GRADE_BANDS } from '../../../lib/ingest/category.ts';
 import { loadCorpus } from '../../../lib/ingest/corpus.ts';
 import { normalize } from '../../../lib/ingest/normalize.ts';
 import { seedClubConfig } from '../../../lib/seed.ts';
@@ -65,25 +66,13 @@ const fieldCell = (rider: PlacedRider) =>
 /**
  * The fourteen published categories, in the order the cards should run.
  *
- * Written out here rather than imported from the builder. A test that reuses
- * the ordering it is checking proves only that the code agrees with itself.
+ * Built from the ingest vocabulary rather than from the builder's own ordering.
+ * A test that reuses the ordering it is checking proves only that the code
+ * agrees with itself.
  */
-const LEAGUE_ORDER: readonly string[] = [
-  'MS1 Boys',
-  'MS1 Girls',
-  'MS2 Boys',
-  'MS2 Girls',
-  'MS3 Boys',
-  'MS3 Girls',
-  'HS1 Boys',
-  'HS1 Girls',
-  'HS2 Boys',
-  'HS2 Girls',
-  'HS3 Boys',
-  'HS3 Girls',
-  'Varsity Boys',
-  'Varsity Girls',
-];
+const LEAGUE_ORDER: readonly string[] = GRADE_BANDS.flatMap((band) =>
+  GENDERS.map((gender) => `${band} ${gender}`),
+);
 
 /** The published place off the card's own Place cell. `—` is a rider unplaced. */
 const placeOf = (rider: PlacedRider): number => {

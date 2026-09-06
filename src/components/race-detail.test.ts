@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { GENDERS, GRADE_BANDS } from '../lib/ingest/category.ts';
 import {
   buildSquadCard,
   categoryMarks,
@@ -341,10 +342,15 @@ describe('the sort keys, on their own', () => {
     }
   });
 
-  it('ranks categories by the league order the ingest module already publishes', () => {
-    expect(categoryRank('MS1 Boys')).toBeLessThan(categoryRank('MS1 Girls'));
-    expect(categoryRank('MS3 Girls')).toBeLessThan(categoryRank('HS1 Boys'));
-    expect(categoryRank('HS3 Girls')).toBeLessThan(categoryRank('Varsity Boys'));
-    expect(categoryRank('Varsity Girls')).toBeLessThan(categoryRank('Tandem Unicycle'));
+  it('ranks exactly the fourteen the league publishes, in the league order', () => {
+    // The pin. `CATEGORY_SEQUENCE` is a second copy of a vocabulary that lives
+    // in `ingest/category.ts`, and this is what keeps the two from drifting: a
+    // band added to the league that never reached the page fails here.
+    const league = GRADE_BANDS.flatMap((band) => GENDERS.map((gender) => `${band} ${gender}`));
+    expect(league.map(categoryRank)).toEqual(league.map((_, rank) => rank));
+  });
+
+  it('sorts a category the league does not publish behind all fourteen', () => {
+    expect(categoryRank('Tandem Unicycle')).toBe(GRADE_BANDS.length * GENDERS.length);
   });
 });

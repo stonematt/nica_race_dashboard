@@ -34,7 +34,6 @@
  * what is true.
  */
 
-import { GENDERS, GRADE_BANDS } from '../lib/ingest/category.ts';
 import type { FieldMark, OutsideMark } from './field-strip.ts';
 
 /**
@@ -288,20 +287,34 @@ export function categoryMarks(
 export type RiderEntry = { row: RaceResultRow; name: string };
 
 /**
- * Every published category, in the order the league ranks them.
+ * The fourteen published categories, in the order the league ranks them.
  *
- * Built from `GRADE_BANDS` and `GENDERS` rather than restated here. That list
- * is already the league's own ordering, and a second copy of it in a second
- * module is exactly the drift `ingest/category.ts` exists to prevent — the
- * fourteen categories are one vocabulary, wherever they are read.
+ * Written out rather than derived from `GRADE_BANDS` and `GENDERS`, which are
+ * the same fourteen in the same order. Nothing under `src/components/` reaches
+ * into the ingest layer — that is the boundary `lapSeconds` keeps, and one
+ * constant is not worth crossing it for. The cost of a second copy is drift,
+ * and `race-detail.test.ts` pins this list against the ingest vocabulary so a
+ * band the league adds cannot quietly fail to appear here.
  */
+const CATEGORY_SEQUENCE: readonly string[] = [
+  'MS1 Boys',
+  'MS1 Girls',
+  'MS2 Boys',
+  'MS2 Girls',
+  'MS3 Boys',
+  'MS3 Girls',
+  'HS1 Boys',
+  'HS1 Girls',
+  'HS2 Boys',
+  'HS2 Girls',
+  'HS3 Boys',
+  'HS3 Girls',
+  'Varsity Boys',
+  'Varsity Girls',
+];
+
 const CATEGORY_ORDER: ReadonlyMap<string, number> = new Map(
-  GRADE_BANDS.flatMap((band, bandIndex) =>
-    GENDERS.map(
-      (gender, genderIndex) =>
-        [`${band} ${gender}`, bandIndex * GENDERS.length + genderIndex] as const,
-    ),
-  ),
+  CATEGORY_SEQUENCE.map((category, rank) => [category, rank]),
 );
 
 /**
@@ -316,8 +329,8 @@ export function categoryRank(category: string): number {
   return CATEGORY_ORDER.get(category) ?? CATEGORY_ORDER.size;
 }
 
-/** The only shape a place is allowed to be read as a number in. */
-const PLACE_NUMBER = /^\d+$/;
+/** The only shape a published string is allowed to be read as a number in. */
+const WHOLE_NUMBER = /^\d+$/;
 
 /**
  * The published place, as a sort key — and nothing more.
@@ -331,7 +344,7 @@ const PLACE_NUMBER = /^\d+$/;
  */
 export function placeRank(place: string): number {
   const published = place.trim();
-  return PLACE_NUMBER.test(published) ? Number(published) : Number.POSITIVE_INFINITY;
+  return WHOLE_NUMBER.test(published) ? Number(published) : Number.POSITIVE_INFINITY;
 }
 
 /** Code-unit order. Deterministic everywhere, unlike a collation or a locale. */
@@ -341,8 +354,8 @@ function compareText(a: string, b: string): number {
 
 /** Plates sort numerically when they are numbers, so `9` comes before `10`. */
 function comparePlate(a: string, b: string): number {
-  const aNum = PLACE_NUMBER.test(a);
-  const bNum = PLACE_NUMBER.test(b);
+  const aNum = WHOLE_NUMBER.test(a);
+  const bNum = WHOLE_NUMBER.test(b);
   if (aNum && bNum) return Number(a) - Number(b);
   if (aNum !== bNum) return aNum ? -1 : 1;
   return compareText(a, b);
