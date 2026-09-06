@@ -46,13 +46,19 @@ Fill in `.env.local`. At minimum you need three things:
 | `AUTH_ALLOWED_EMAILS` | Your own address. Comma-separated; this is the gate for magic-link sign-in, and for seeding. |
 | `AUTH_DEV_LOGIN`      | `1`, to sign in locally without a mail server. Development only — see Auth.                  |
 
-Then bring up the database and seed yourself an account:
+Then bring up the database, seed the club and yourself, and load the archived race payloads:
 
 ```bash
 pnpm db:migrate
-node bin/seed.ts --email you@example.org --club "Salem Composite Descenders"
+node bin/seed.ts --club-config --email you@example.org
+node bin/normalize.ts --load-fixtures   # archive the corpus into raw_fetch
+node bin/normalize.ts                   # decode it into the result tables
 pnpm dev
 ```
+
+`--club-config` is what fills the club, its scoring teams, the roster, the plate mappings and the squads from `config/club-seed.json`; without it you get a coach on a club with nobody in it. The club's **name** comes from that file too, so there is nothing to type and nothing to keep in step — one invocation puts the coach and the roster on the same club row.
+
+The two `normalize` runs are two different jobs and both are needed. `--load-fixtures` archives payloads into `raw_fetch` and decodes nothing; the bare run decodes that archive into the result tables. The first prints a cheerful "archived 60 payloads" whether or not you run the second, so it is easy to stop early and find every result table empty. On a checkout with no `fixtures/` corpus, skip both — see [`docs/fixtures.md`](docs/fixtures.md).
 
 The `bin/` scripts read `.env.local` themselves, whether you run them as `pnpm seed` or as `node bin/seed.ts` — the file is resolved from the repo root, not from the directory you happen to be in. A variable already set in your shell beats the file, so `DATABASE_URL=... pnpm db:migrate` still points somewhere else for one run. Having no `.env.local` at all is fine: `DATABASE_URL` falls back to `./.pglite`, and nothing else is needed to migrate.
 
@@ -97,9 +103,10 @@ Schema lives in `src/lib/db/schema.ts`; migrations in `src/lib/db/migrations/`. 
 | `pnpm db:generate`                  | Generate a migration from the schema          |
 | `pnpm db:migrate`                   | Apply migrations                              |
 | `pnpm db:studio`                    | Drizzle Studio                                |
-| `pnpm seed`                         | Seed the first admin (see above)              |
+| `pnpm seed`                         | Seed the club config and the first admin      |
 | `pnpm fetch`                        | Pull from RaceResult _(stub)_                 |
 | `pnpm normalize --load-fixtures`    | Archive the local corpus into `raw_fetch`     |
+| `pnpm normalize`                    | Decode that archive into the result tables    |
 
 ## Testing
 

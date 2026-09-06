@@ -19,7 +19,14 @@ import { databaseUrl, loadEnvLocal } from '../../bin/env.ts';
 import { ClubConfigError, loadClubConfig, pseudonymFor, type ClubConfig } from './club-config.ts';
 import { createTestDb, type TestDatabase } from './db/testing.ts';
 import * as schema from './db/schema.ts';
-import { NotAllowlistedError, seedAdmin, seedClubConfig } from './seed.ts';
+import {
+  ClubMismatchError,
+  NotAllowlistedError,
+  resolveAdminClub,
+  seedAdmin,
+  seedClubConfig,
+  StrandedCoachError,
+} from './seed.ts';
 
 const env = { AUTH_ALLOWED_EMAILS: 'coach@example.org' };
 const CLUB = 'Salem Composite Descenders';
@@ -122,6 +129,91 @@ describe('seedAdmin', () => {
   it('defaults the display name to the local part of the address', async () => {
     const result = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
     expect(result.displayName).toBe('coach');
+  });
+});
+
+/**
+ * A re-run reports the database, not what the run asked for (#62).
+ *
+ * The README used to name a club the config did not, so the documented setup
+ * produced two club rows — coach on one, roster on the other — and the obvious
+ * recovery, re-running with the right name, printed success and changed
+ * nothing. Both halves of that are covered here.
+ */
+describe('seedAdmin on a database that already has the coach', () => {
+  const OTHER = 'Descenders';
+
+  it('names the club the coach is on, not the one the run asked for', async () => {
+    const first = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
+    const second = await seedAdmin(db, { email: 'coach@example.org', clubName: OTHER, env });
+
+    // Throwing rather than expect(): it narrows the result union, so the
+    // mismatch field below is only reachable on the branch that can carry it.
+    if (second.created) throw new Error('expected the existing coach, not a fresh seed');
+
+    expect(second.clubName).toBe(CLUB);
+    expect(second.clubId).toBe(first.clubId);
+    expect(second.requestedClubName).toBe(OTHER);
+  });
+
+  it('creates no second club row for the club it was asked for', async () => {
+    await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
+    await seedAdmin(db, { email: 'coach@example.org', clubName: OTHER, env });
+
+    const clubs = await db.select().from(schema.club);
+    expect(clubs.map((c) => c.name)).toEqual([CLUB]);
+  });
+
+  it('stays a calm no-op when the club agrees', async () => {
+    await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
+    const again = await seedAdmin(db, { email: 'coach@example.org', clubName: CLUB, env });
+
+    if (again.created) throw new Error('expected the existing coach, not a fresh seed');
+
+    expect(again.requestedClubName).toBeUndefined();
+    expect(await db.select().from(schema.club)).toHaveLength(1);
+    expect(await db.select().from(schema.coach)).toHaveLength(1);
+  });
+
+  it('reports the display name the coach row carries, not the one passed in', async () => {
+    await seedAdmin(db, {
+      email: 'coach@example.org',
+      clubName: CLUB,
+      displayName: 'A Coach',
+      env,
+    });
+    const again = await seedAdmin(db, {
+      email: 'coach@example.org',
+      clubName: CLUB,
+      displayName: 'Someone Else',
+      env,
+    });
+
+    expect(again.displayName).toBe('A Coach');
+  });
+});
+
+/**
+ * Which club an admin seed lands on. The config file carries the club's
+ * identity, so it is the answer, and `--club` is at most an agreement.
+ */
+describe('resolveAdminClub', () => {
+  const config = { club: 'Descenders' } as ClubConfig;
+
+  it('answers with the config’s club when nothing was asked for', () => {
+    expect(resolveAdminClub(config)).toBe('Descenders');
+    expect(resolveAdminClub(config, '  ')).toBe('Descenders');
+  });
+
+  it('accepts a --club that agrees', () => {
+    expect(resolveAdminClub(config, ' Descenders ')).toBe('Descenders');
+  });
+
+  it('refuses a --club that disagrees, before anything is written', () => {
+    // upsertClub matches on the name, so honouring both would put the coach on
+    // one club row and the whole roster on another.
+    expect(() => resolveAdminClub(config, CLUB)).toThrow(ClubMismatchError);
+    expect(() => resolveAdminClub(config, CLUB)).toThrow(/Descenders/);
   });
 });
 
@@ -347,6 +439,20 @@ describe('seedClubConfig', () => {
     expect(clubs[0]!.id).toBe(result.clubId);
   });
 
+  it('refuses to seed onto a club that strands the coach already in the database', async () => {
+    // The other half of #62, reached by editing the config's club rather than
+    // by the README: the roster would land on the new name and the coach would
+    // keep the old one, which is two club rows and an empty app.
+    await seedAdmin(db, { email: 'coach@example.org', clubName: 'Salem Composite', env });
+
+    await expect(seedClubConfig(db, clubConfig({ club: 'Descenders' }))).rejects.toThrow(
+      StrandedCoachError,
+    );
+
+    const clubs = await db.select().from(schema.club);
+    expect(clubs.map((c) => c.name)).toEqual(['Salem Composite']);
+  });
+
   it('drops a scoring team the config no longer lists', async () => {
     await seedClubConfig(db, clubConfig({ scoringTeams: [SALEM, SPRAGUE] }));
     await seedClubConfig(db, clubConfig({ scoringTeams: [SALEM] }));
@@ -393,6 +499,53 @@ describe('seedClubConfig', () => {
 
     const names = (await db.select().from(schema.rider)).map((r) => r.displayName);
     expect(names.every((n) => /^«RIDER-[A-Z]+»$/.test(n))).toBe(true);
+  });
+});
+
+/**
+ * The sequence the README documents, against a fresh database — the thing that
+ * used to end with the coach on one club and the roster on another (#62).
+ *
+ * Driven through the same functions `bin/seed.ts` calls, rather than by running
+ * the commands: `pnpm db:migrate` and `pnpm seed` write to whatever
+ * `DATABASE_URL` resolves to, and a test must not.
+ */
+describe('the README setup sequence', () => {
+  it('ends with one club, one coach, and the roster reachable from that coach', async () => {
+    const config = loadClubConfig({
+      riderNamesFile: path.join(os.tmpdir(), 'no-such-rider-names.json'),
+    });
+
+    // `node bin/seed.ts --club-config --email you@example.org`: config first, so
+    // the admin lands on the club it created.
+    await seedClubConfig(db, config);
+    const admin = await seedAdmin(db, {
+      email: 'coach@example.org',
+      clubName: resolveAdminClub(config),
+      env,
+    });
+
+    const clubs = await db.select().from(schema.club);
+    expect(clubs).toHaveLength(1);
+    expect(clubs[0]!.name).toBe(config.club);
+
+    const coaches = await db.select().from(schema.coach);
+    expect(coaches).toHaveLength(1);
+    expect(coaches[0]!.clubId).toBe(clubs[0]!.id);
+    expect(admin.clubId).toBe(clubs[0]!.id);
+
+    // The roster the coach can actually see: squads on their club, with members.
+    const squads = await db
+      .select()
+      .from(schema.squad)
+      .where(eq(schema.squad.clubId, coaches[0]!.clubId));
+    expect(squads.length).toBeGreaterThan(0);
+
+    const members = await db
+      .select()
+      .from(schema.squadMember)
+      .where(eq(schema.squadMember.squadId, squads[0]!.id));
+    expect(members).toHaveLength(config.riders.length);
   });
 });
 
