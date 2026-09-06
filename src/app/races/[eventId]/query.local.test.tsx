@@ -17,7 +17,6 @@
  * a rider from one guard to another has to say so.
  */
 
-import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadClubConfig } from '../../../lib/club-config.ts';
@@ -238,12 +237,11 @@ describe('the prologue has no percent-back axis at all', () => {
      * #60 because nothing here asked what a coach is actually shown. The bug
      * was a render — 25 cards drew an axis labelled with the floor.
      *
-     * `createElement` rather than JSX because the local lane is `.ts` only, and
-     * a tally rather than a per-card assertion because a failing `toContain`
-     * prints the received markup, which is a rider card.
+     * A tally rather than a per-card assertion, because a failing `toContain`
+     * prints the received markup — and the received markup is a rider card.
      */
     const rendered = cards(prologue).map((rider) =>
-      renderToStaticMarkup(createElement(RiderCardView, { card: rider.card, field: rider.field })),
+      renderToStaticMarkup(<RiderCardView card={rider.card} field={rider.field} />),
     );
 
     expect(
