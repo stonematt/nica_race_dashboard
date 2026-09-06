@@ -609,6 +609,73 @@ describe('seedClubConfig cleans up what the config dropped', () => {
   });
 });
 
+/**
+ * A config file carries exactly one season, so seeding is a per-season edit.
+ * Before squads were season-keyed (#81) the reconcile was scoped by club alone,
+ * and seeding the new year reaped the old year's squads as though the coach had
+ * deleted them — taking last season's roster grouping with them.
+ */
+describe('seedClubConfig across seasons', () => {
+  const published = new Map([
+    [2025, new Set([SALEM])],
+    [2026, new Set([SALEM])],
+  ]);
+  const seed = (year: number, squadName: string, ...members: string[]) =>
+    seedClubConfig(
+      db,
+      clubConfig({
+        season: year,
+        riders: members.map((key, index) => rider(key, plate(`20${index + 2}`))),
+        squads: [{ name: squadName, members }],
+      }),
+      { publishedScoringTeams: published },
+    );
+
+  /**
+   * The squads must be named differently per season for this to bite: the
+   * reconcile deletes what the config no longer names, so a name carried over
+   * would survive a club-scoped delete by accident and prove nothing.
+   */
+  it('leaves last season’s squads standing when the new season renames them', async () => {
+    const first = await seed(2025, 'Descenders', 'rider-a', 'rider-b');
+    const second = await seed(2026, 'Racers', 'rider-a');
+
+    const squads = await db.select().from(schema.squad).orderBy(schema.squad.seasonId);
+    expect(squads.map((s) => [s.seasonId, s.name])).toEqual([
+      [first.seasonId, 'Descenders'],
+      [second.seasonId, 'Racers'],
+    ]);
+  });
+
+  it('keeps each season’s membership on its own squad', async () => {
+    const first = await seed(2025, 'Descenders', 'rider-a', 'rider-b');
+    const second = await seed(2026, 'Racers', 'rider-a');
+
+    const rows = await db
+      .select({ seasonId: schema.squad.seasonId, riderId: schema.squadMember.riderId })
+      .from(schema.squadMember)
+      .innerJoin(schema.squad, eq(schema.squad.id, schema.squadMember.squadId));
+
+    expect(rows.filter((r) => r.seasonId === first.seasonId)).toHaveLength(2);
+    expect(rows.filter((r) => r.seasonId === second.seasonId)).toHaveLength(1);
+  });
+
+  it('gives a squad name carried across two seasons a row in each', async () => {
+    const first = await seed(2025, 'Descenders', 'rider-a');
+    const second = await seed(2026, 'Descenders', 'rider-a');
+
+    const squads = await db.select().from(schema.squad);
+    expect(squads).toHaveLength(2);
+    expect(squads.map((s) => s.seasonId).sort()).toEqual([first.seasonId, second.seasonId]);
+  });
+
+  it('still reconciles within a season, so a re-seed does not accumulate squads', async () => {
+    await seed(2025, 'Descenders', 'rider-a');
+    await seed(2025, 'Descenders', 'rider-a');
+    expect(await db.select().from(schema.squad)).toHaveLength(1);
+  });
+});
+
 describe('v_unmapped_rider, against config', () => {
   it('names the riders on the club’s scoring teams that no mapping resolves', async () => {
     const { seasonId } = await seedClubConfig(

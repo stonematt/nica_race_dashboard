@@ -428,6 +428,59 @@ export const rider = pgTable('rider', {
 });
 
 /**
+ * The season-keyed club roster: which riders were this club's in a given year.
+ * The parallel to `club_scoring_team`, on the other side of the join — that one
+ * season-keys the league's name for us, this one season-keys who we were.
+ *
+ * Membership has to carry a season or a club has no history. Resolved through
+ * `squad_member` alone it would be current-state only, so "how did we do in
+ * 2022" would answer with today's roster: a rider who has since graduated
+ * vanishes from their own seasons, and a rider who joined this year appears in
+ * races they never rode.
+ *
+ * Two reads off one table, and a transfer needs both. The club a rider left
+ * reads by (club, season) and still sees them in the years they rode; the club
+ * they joined reads by rider and gets their whole career. So a rider may hold
+ * rows for two clubs in one season — a mid-season transfer is exactly that —
+ * and the key deliberately permits it.
+ *
+ * Also the only way a non-start is countable. A missed round is the *absence*
+ * of a result row, not a value in one, so it is legible solely by crossing this
+ * roster against the season's rounds (ADR-0001, `docs/ux/moments.md`).
+ *
+ * Stands alone and requires no result, for the same reason `rider` does: a
+ * roster includes kids who practise, join late, or get injured in week one.
+ * Deliberately not derived from `squad_member` — squadding is a coaching lens
+ * over the roster, and a rider can be on the roster and in no squad.
+ *
+ * No mid-season bounds, unlike `rider_plate`. That table needed them because
+ * the source data forced them; here the season is the grain we chose (#81).
+ *
+ * Nothing writes this table yet — the coach's reconcile action is #79 and the
+ * reads that need it are #82 and #18. It lands ahead of them because every
+ * cross-season club number is silently wrong without it.
+ */
+export const clubMember = pgTable(
+  'club_member',
+  {
+    clubId: integer('club_id')
+      .notNull()
+      .references(() => club.id, { onDelete: 'cascade' }),
+    seasonId: integer('season_id')
+      .notNull()
+      .references(() => season.id),
+    riderId: integer('rider_id')
+      .notNull()
+      .references(() => rider.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.clubId, t.seasonId, t.riderId] }),
+    /** The by-rider read: a rider's club history, including across a transfer. */
+    index('club_member_rider_idx').on(t.riderId),
+  ],
+);
+
+/**
  * Rider identity, with race bounds. (season, plate) alone is unsafe: in 2025,
  * 4 riders changed plates mid-season (splitting one person in two) and 7 plates
  * were reissued to a second person (merging two people into one).
@@ -473,13 +526,31 @@ export const coach = pgTable('coach', {
   displayName: text('display_name').notNull(),
 });
 
-export const squad = pgTable('squad', {
-  id: serial('id').primaryKey(),
-  clubId: integer('club_id')
-    .notNull()
-    .references(() => club.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-});
+/**
+ * A squad is constituted for a season. "JV" in 2025 and "JV" in 2026 are two
+ * squads that share a name, not one squad with a history — which is why the
+ * who/when matrix gives squad no across-seasons cell at all
+ * (`docs/ux/moments.md`).
+ *
+ * This does not walk back the map's standing decision that squads carry no
+ * history. That decision is about the mid-season shuffle: a coach regroups at
+ * will and we record where a rider ended up, never the churn. What is
+ * season-keyed is the squad itself (#81).
+ */
+export const squad = pgTable(
+  'squad',
+  {
+    id: serial('id').primaryKey(),
+    clubId: integer('club_id')
+      .notNull()
+      .references(() => club.id, { onDelete: 'cascade' }),
+    seasonId: integer('season_id')
+      .notNull()
+      .references(() => season.id),
+    name: text('name').notNull(),
+  },
+  (t) => [uniqueIndex('squad_club_season_name_key').on(t.clubId, t.seasonId, t.name)],
+);
 
 /** ~20 coaches across ~6 squads is roughly three apiece. Many-to-many. */
 export const squadCoach = pgTable(
@@ -494,9 +565,18 @@ export const squadCoach = pgTable(
 );
 
 /**
- * Current state only — no validity range, per the map's standing decision that
- * squads carry no history. Deliberately unlike rider_plate, which needs bounds
- * because the source data forced them.
+ * Deliberately still a bare pair: the season is `squad.season_id`, so a
+ * membership row is already season-scoped through its squad and a column here
+ * would only restate it.
+ *
+ * Within a season this is current state only — no validity range, per the map's
+ * standing decision that a squad's mid-season shuffle carries no history.
+ * Unlike rider_plate, which needs bounds because the source data forced them.
+ *
+ * Not constrained to `club_member` in the database. "You may only squad a rider
+ * on that season's roster" needs the season restated here to be a foreign key,
+ * and the check already lives where the roster is written (`parseSquads` in
+ * club-config.ts). A redundant column buys nothing else.
  */
 export const squadMember = pgTable(
   'squad_member',
@@ -590,9 +670,11 @@ export const individualResultRelations = relations(individualResult, ({ one }) =
 export const clubRelations = relations(club, ({ many }) => ({
   scoringTeams: many(clubScoringTeam),
   squads: many(squad),
+  members: many(clubMember),
 }));
 
 export const riderRelations = relations(rider, ({ many }) => ({
   plates: many(riderPlate),
   squadMemberships: many(squadMember),
+  clubSeasons: many(clubMember),
 }));
