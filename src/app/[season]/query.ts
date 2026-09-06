@@ -13,6 +13,7 @@
  * not.
  */
 
+import { cache } from 'react';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../../lib/db/index.ts';
 
@@ -42,19 +43,25 @@ export async function listSeasonYears(db: AnyDatabase): Promise<number[]> {
  * one. A segment that is not a bare non-negative integer, or one that is but
  * matches no season on record, are both "not one" — the caller's cue to
  * render a real not-found instead of crashing on a bad lookup.
+ *
+ * `cache()`-wrapped: `SeasonLayout` and the page beneath it both resolve the
+ * same segment against the same `db` (a module-level singleton, `appDb()`),
+ * so within one request the second call is deduped rather than re-querying.
+ * Outside a request — this file's own tests included — `cache()` has no
+ * dispatcher to key into and simply calls through, so behaviour there is
+ * unchanged.
  */
-export async function resolveSeasonByYear(
-  db: AnyDatabase,
-  segment: string,
-): Promise<SeasonRef | null> {
-  if (!/^\d+$/.test(segment)) return null;
+export const resolveSeasonByYear = cache(
+  async (db: AnyDatabase, segment: string): Promise<SeasonRef | null> => {
+    if (!/^\d+$/.test(segment)) return null;
 
-  const result = await db.execute(
-    sql`select id, year from season where year = ${Number(segment)} limit 1`,
-  );
-  const row = rowsOf(result)[0];
-  return row ? { id: num(row.id), year: num(row.year) } : null;
-}
+    const result = await db.execute(
+      sql`select id, year from season where year = ${Number(segment)} limit 1`,
+    );
+    const row = rowsOf(result)[0];
+    return row ? { id: num(row.id), year: num(row.year) } : null;
+  },
+);
 
 /** The current season: the latest year on record. Null before anything is seeded. */
 export async function resolveCurrentSeason(db: AnyDatabase): Promise<SeasonRef | null> {
