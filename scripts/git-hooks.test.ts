@@ -232,6 +232,22 @@ describe('the pre-commit hook and symlinks into the corpus', () => {
     expect(git(dir, 'log', '--oneline').stdout.trim().split('\n')).toHaveLength(2);
   });
 
+  it('follows a chain of links to a payload file, the way the guard does', async () => {
+    // The hook resolves a directory target with `cd -P`, which cannot enter a
+    // file. Its fallback has to resolve the directory the target lands in, not
+    // the one the link sits in, or realpath() on the guard's side sees the
+    // corpus and the hook does not — and the two layers stop agreeing.
+    const dir = await scratchRepo();
+    symlinkSync(`${CORPUS_DIRNAME}/2025`, join(dir, 'linkdir'));
+    symlinkSync('linkdir/raw-357242-individual-results-overall.json', join(dir, 'evidence.json'));
+    git(dir, 'add', '-f', 'evidence.json');
+
+    const commit = git(dir, 'commit', '-m', 'link one payload through a link');
+
+    expect(commit.status).not.toBe(0);
+    expect(commit.stderr).toContain('evidence.json');
+  });
+
   it('fails closed on a link it cannot resolve, and says which one', async () => {
     const dir = await scratchRepo();
     symlinkSync('../nowhere/fixtures', join(dir, 'gone'));

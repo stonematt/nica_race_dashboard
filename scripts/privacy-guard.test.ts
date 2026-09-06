@@ -377,6 +377,16 @@ describe('resolving a tracked symlink', () => {
     expect(resolveTrackedLink('docs/nested-link', root)).toEqual({ resolved: 'fixtures/2025' });
   });
 
+  it('follows a chain of links through to a payload file', async () => {
+    const root = await tree();
+    await writeFile(join(root, 'fixtures', '2025', 'raw.json'), '{}');
+    symlinkSync('fixtures/2025', join(root, 'linkdir'));
+    symlinkSync('linkdir/raw.json', join(root, 'evidence.json'));
+    expect(resolveTrackedLink('evidence.json', root)).toEqual({
+      resolved: join('fixtures', '2025', 'raw.json'),
+    });
+  });
+
   it('reports an ordinary link relative to the root too', async () => {
     const root = await tree();
     symlinkSync(join(root, 'docs'), join(root, 'docslink'));

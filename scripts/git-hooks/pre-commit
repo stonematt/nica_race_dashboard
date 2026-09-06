@@ -19,6 +19,10 @@
 # airtight.
 #
 # Fails closed: if git cannot be asked what is staged, the commit is refused.
+# Every read of the index is therefore its own unpiped command substitution and
+# is filtered afterwards — `X=$(git ... | awk ...)` reports awk's exit status,
+# not git's, so a git that died mid-stream would read as an empty index and
+# wave the commit through. There is no `pipefail` in POSIX sh to lean on.
 #
 # Installed by `pnpm install` (scripts/install-git-hooks.mjs sets
 # core.hooksPath). POSIX sh with no dependencies on purpose: it has to run
@@ -38,11 +42,11 @@ fi
 # Rename detection is off by default for --name-only, so ask for it explicitly.
 # `git mv fixtures/2025/x.json notes.json` stages the payload's bytes at a path
 # the check above never looks at.
-if ! renamed=$(git diff --cached --name-status --find-renames --diff-filter=R |
-  awk -F'\t' '$2 ~ /^fixtures\// { print $2 " -> " $3 }'); then
+if ! renames=$(git diff --cached --name-status --find-renames --diff-filter=R); then
   echo 'pre-commit: could not read the index; refusing to commit.' >&2
   exit 1
 fi
+renamed=$(printf '%s\n' "$renames" | awk -F'\t' '$2 ~ /^fixtures\// { print $2 " -> " $3 }')
 
 # A staged symlink is mode 120000 in the index. The pathspec above only knows
 # the name `fixtures`, so `ln -s fixtures fixtures2` walked straight past it
@@ -52,11 +56,12 @@ fi
 #
 # --raw prints `:<srcmode> <dstmode> <sha> <sha> <status>\t<path>`, with the
 # destination path last on a rename.
-if ! links=$(git diff --cached --raw --diff-filter=ACMR |
-  awk -F'\t' '{ split($1, meta, " "); if (meta[2] == "120000") print (NF >= 3 ? $3 : $2) }'); then
+if ! entries=$(git diff --cached --raw --diff-filter=ACMR); then
   echo 'pre-commit: could not read the index; refusing to commit.' >&2
   exit 1
 fi
+links=$(printf '%s\n' "$entries" |
+  awk -F'\t' '{ split($1, meta, " "); if (meta[2] == "120000") print (NF >= 3 ? $3 : $2) }')
 
 if ! root=$(git rev-parse --show-toplevel); then
   echo 'pre-commit: could not find the repository root; refusing to commit.' >&2
@@ -81,19 +86,25 @@ while IFS= read -r link; do
   fi
 
   # `cd -P` resolves every symlink on the way, which is what the guard's
-  # realpath() does. It only works on a directory; a link to a *file* falls back
-  # to the parent's physical path plus the raw target, which is enough for the
-  # segment test below and errs toward matching rather than missing.
+  # realpath() does. It only works on a directory; a link to a *file* takes one
+  # hop with readlink and resolves the directory that hop lands in, which
+  # follows any chain of directory links the same way realpath() would.
   if target=$(cd -P -- "$root/$link" 2>/dev/null && pwd -P); then
     :
   else
     parent=$(cd -P -- "$(dirname -- "$root/$link")" 2>/dev/null && pwd -P) || parent=$root
     raw=$(readlink -- "$root/$link" 2>/dev/null) || raw=''
     case "$raw" in
-      /*) target=$raw ;;
-      '') target="$root/$link" ;;
-      *) target="$parent/$raw" ;;
+      /*) hop=$raw ;;
+      '') hop="$root/$link" ;;
+      *) hop="$parent/$raw" ;;
     esac
+    # Resolve the directory that hop lands in, not the one the link sits in:
+    # `evidence.json -> linkdir/raw.json` with `linkdir -> fixtures/2025` is in
+    # the corpus, and stopping at the link's own parent would miss it while
+    # realpath() on the guard's side would not.
+    dir=$(cd -P -- "$(dirname -- "$hop")" 2>/dev/null && pwd -P) || dir=$(dirname -- "$hop")
+    target="$dir/$(basename -- "$hop")"
   fi
 
   # Relative to the repo root when it lands inside, absolute when it does not —
