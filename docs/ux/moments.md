@@ -21,14 +21,19 @@ League tree (theirs, read-only)      Club tree (ours, editable)
         rider                              rider
 ```
 
-The _when_ axis is three scales, with Season as the ambient frame rather than a filter:
+The _when_ axis is two scales, with Season as the ambient frame rather than a filter:
 
-|            | one round       | season to date           | across seasons |
-| ---------- | --------------- | ------------------------ | -------------- |
-| conference | field context   | standings, read verbatim | —              |
-| club       | the club's day  | the club's arc           | —              |
-| squad      | the squad's day | the squad's arc          | —              |
-| rider      | the ride        | progression              | career         |
+|            | one round       | season to date           |
+| ---------- | --------------- | ------------------------ |
+| conference | field context   | standings, read verbatim |
+| club       | the club's day  | the club's arc           |
+| squad      | the squad's day | the squad's arc          |
+| rider      | the ride        | progression              |
+
+There is no across-seasons column. A Career axis was carried here until the coach-flow
+session (2026-09-06) observed that no moment asks for one — M2 is season-shaped and so is
+M6 — and that an axis with no job on it is where scope creep enters a roadmap. It comes
+back when a coach asks for it.
 
 Two rules fall out of the frame:
 

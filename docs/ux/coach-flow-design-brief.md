@@ -1,4 +1,8 @@
 <!--
+SUPERSEDED (2026-09-06) by `docs/ux/coach-flow-session.md`, which is the record of the
+session this brief was written for and the authority on every question the brief poses.
+Kept for provenance — read it to see what was asked, never to see what was decided.
+
 A brief written to be handed whole to an external design session (Claude Design or
 similar). It is self-contained on purpose — it restates vocabulary and constraints that
 live in CONTEXT.md, docs/adr/ and docs/ux/moments.md so that a reader with no repo
