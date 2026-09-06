@@ -13,6 +13,7 @@
  * src/lib/admission.ts owns that branch — this file only registers providers.
  */
 
+import { cache } from 'react';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import NextAuth, { type NextAuthConfig } from 'next-auth';
 import type { Provider } from 'next-auth/providers';
@@ -93,4 +94,16 @@ export const authOptions = {
   },
 } satisfies NextAuthConfig;
 
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
+const { handlers, auth: uncachedAuth, signIn, signOut } = NextAuth(authOptions);
+
+/**
+ * `SeasonLayout` and every page beneath `/[season]` resolve the session
+ * independently — the App Router gives a layout no way to pass props down to
+ * its children — so a single request can call this more than once. `cache()`
+ * dedupes those calls within one request; outside of a request (a test, a
+ * script) it is a no-op passthrough, since there is no request-scoped cache
+ * to key into.
+ */
+const auth = cache(uncachedAuth);
+
+export { handlers, auth, signIn, signOut };

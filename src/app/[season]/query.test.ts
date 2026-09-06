@@ -101,6 +101,20 @@ describe('a coach’s default squad', () => {
     expect(await resolveDefaultSquad(db, SOLO_COACH, 2)).toEqual({ id: 4, name: 'Descenders' });
   });
 
+  it('falls back to the season’s only squad when no coach link resolves', async () => {
+    // The dev sign-in hands back a session whose user.id is the typed email,
+    // never the `user` row's id, so `coach.user_id` cannot match under it.
+    // One squad in the season is not ambiguous, so it is the answer.
+    expect(await resolveDefaultSquad(db, 'nobody@example.test', 1)).toEqual({
+      id: 1,
+      name: 'Descenders',
+    });
+  });
+
+  it('does not guess when the season holds more than one squad', async () => {
+    expect(await resolveDefaultSquad(db, 'nobody@example.test', 2)).toBeNull();
+  });
+
   it('picks deterministically by lowest squad name when a coach holds more than one', async () => {
     // MULTI_COACH holds 'Wolf Pack' (id 2) and 'Alpha Squad' (id 3) — 'Alpha
     // Squad' collates first, regardless of insertion or id order.
