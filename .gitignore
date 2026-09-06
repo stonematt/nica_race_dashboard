@@ -4,8 +4,11 @@ out/
 build/
 coverage/
 
-# PGlite's on-disk database — local derived state, never committed
-.pglite/
+# PGlite's on-disk database — local derived state, never committed. The glob also
+# catches hand-made backups like `.pglite.bak-20260905/`, which matter more than
+# "derived state" suggests: a seeded database holds the same minors' names, schools
+# and grades the corpus does, and this repo is public.
+.pglite*/
 
 # The fixture corpus lives here, in the tree, and is never committed: the
 # payloads carry minors' full names, schools, grades and finish times, and this
