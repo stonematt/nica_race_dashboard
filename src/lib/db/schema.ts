@@ -575,8 +575,14 @@ export const squadCoach = pgTable(
  *
  * Not constrained to `club_member` in the database. "You may only squad a rider
  * on that season's roster" needs the season restated here to be a foreign key,
- * and the check already lives where the roster is written (`parseSquads` in
- * club-config.ts). A redundant column buys nothing else.
+ * and a redundant column buys nothing else.
+ *
+ * What stands in for it today is narrower than that, and worth saying plainly
+ * rather than leaving a reader to assume the rule is enforced somewhere. On the
+ * seeded path, `parseSquads` checks a squad's members against the rider list in
+ * the same config file — not against `club_member`, which nothing writes yet.
+ * So the rule holds for config-seeded data and nowhere else. Whoever builds the
+ * write surface (#79) owns making it hold there too.
  */
 export const squadMember = pgTable(
   'squad_member',
