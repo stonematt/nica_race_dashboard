@@ -1,5 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource react */
 /*
  * The guards at the render boundary.
  *

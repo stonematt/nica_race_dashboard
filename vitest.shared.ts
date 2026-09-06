@@ -11,10 +11,20 @@
  * cannot drift into disagreeing about timeouts or module resolution.
  */
 
+import react from '@vitejs/plugin-react';
 import type { InlineConfig } from 'vitest/node';
 
 /** Test files that read real payloads. Excluded from the default lane by name. */
-export const LOCAL_ONLY_GLOB = '**/*.local.test.ts';
+export const LOCAL_ONLY_GLOB = '**/*.local.test.{ts,tsx}';
+
+/**
+ * `tsconfig.json` sets `jsx: "preserve"` because Next compiles JSX itself, so
+ * under vitest esbuild falls back to the classic `React.createElement`
+ * transform and any component under test dies with "React is not defined"
+ * (issue #56). This plugin gives esbuild the automatic runtime instead, for
+ * both lanes — go in the root `plugins` array, not under `test`.
+ */
+export const sharedPlugins = [react()];
 
 export const sharedTestConfig = {
   environment: 'node',

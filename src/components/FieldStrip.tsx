@@ -1,19 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource react */
-/*
- * The two pragmas above are for the test runner, not for Next.
- *
- * `tsconfig.json` sets `jsx: "preserve"` (Next compiles JSX itself) and the
- * vitest configs register no React plugin, so esbuild falls back to the classic
- * `React.createElement` transform and a component under test dies with
- * "React is not defined". The pragmas switch this file to the automatic runtime
- * for esbuild; SWC already uses it, so they change nothing about the build.
- *
- * Stated per file rather than fixed centrally because `vitest.shared.ts` and
- * both configs are owned elsewhere this cycle. If a config gains
- * `@vitejs/plugin-react`, delete these two lines.
- */
-
 import {
   buildFieldStrip,
   NO_AXIS_REASON,

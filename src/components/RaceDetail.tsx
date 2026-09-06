@@ -1,7 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource react */
-/* See the note at the top of FieldStrip.tsx for why these two pragmas are here. */
-
 import { FieldStrip } from './FieldStrip.tsx';
 import type { Chip, LapDisplay, RiderCard, SquadCard, UnmappedRider } from './race-detail.ts';
 import type { FieldMark } from './field-strip.ts';

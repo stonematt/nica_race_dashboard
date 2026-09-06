@@ -7,9 +7,10 @@
  */
 
 import { configDefaults, defineConfig } from 'vitest/config';
-import { LOCAL_ONLY_GLOB, sharedTestConfig } from './vitest.shared.ts';
+import { LOCAL_ONLY_GLOB, sharedPlugins, sharedTestConfig } from './vitest.shared.ts';
 
 export default defineConfig({
+  plugins: sharedPlugins,
   test: {
     ...sharedTestConfig,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
