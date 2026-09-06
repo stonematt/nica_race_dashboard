@@ -50,12 +50,11 @@ Then bring up the database and seed yourself an account:
 
 ```bash
 pnpm db:migrate
-AUTH_ALLOWED_EMAILS=you@example.org \
-  node bin/seed.ts --email you@example.org --club "Salem Composite Descenders"
+node bin/seed.ts --email you@example.org --club "Salem Composite Descenders"
 pnpm dev
 ```
 
-Next loads `.env.local` itself; the `bin/` scripts do not. They run under plain Node, which reads no dotenv file, so anything they need goes on the command line or in the environment — hence the inline variable above. `DATABASE_URL` is the exception only because it defaults to `./.pglite` when unset.
+The `bin/` scripts read `.env.local` themselves, whether you run them as `pnpm seed` or as `node bin/seed.ts` — the file is resolved from the repo root, not from the directory you happen to be in. A variable already set in your shell beats the file, so `DATABASE_URL=... pnpm db:migrate` still points somewhere else for one run. Having no `.env.local` at all is fine: `DATABASE_URL` falls back to `./.pglite`, and nothing else is needed to migrate.
 
 `seed.ts` is idempotent, and it refuses any address that isn't on `AUTH_ALLOWED_EMAILS` — the allowlist gates seeding too, not just sign-in.
 

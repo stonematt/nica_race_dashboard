@@ -27,8 +27,11 @@ import { createDb } from '../src/lib/db/index.ts';
 import { loadCorpus } from '../src/lib/ingest/corpus.ts';
 import { normalize } from '../src/lib/ingest/normalize.ts';
 import { buildSnapshot } from '../src/lib/ingest/snapshot.ts';
+import { databaseUrl, loadEnvLocal } from './env.ts';
 
-const url = process.env.DATABASE_URL ?? './.pglite';
+loadEnvLocal();
+
+const url = databaseUrl();
 const db = createDb(url);
 
 if (process.argv.includes('--load-fixtures')) {

@@ -5,8 +5,11 @@
 
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { createDb } from '../src/lib/db/index.ts';
+import { databaseUrl, loadEnvLocal } from './env.ts';
 
-const url = process.env.DATABASE_URL ?? './.pglite';
+loadEnvLocal();
+
+const url = databaseUrl();
 const db = createDb(url);
 
 await migrate(db, { migrationsFolder: './src/lib/db/migrations' });

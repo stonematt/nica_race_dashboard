@@ -43,6 +43,9 @@ import { hasCorpus } from '../src/lib/fixtures.ts';
 import { discoverCorpus } from '../src/lib/ingest/corpus.ts';
 import { fetchEvent, readFetchConfig, refuseCorpusRefetch } from '../src/lib/ingest/fetch.ts';
 import { createHttpTransport, createPoliteClient } from '../src/lib/ingest/transport.ts';
+import { loadEnvLocal } from './env.ts';
+
+loadEnvLocal();
 
 const config = readFetchConfig(process.env);
 
