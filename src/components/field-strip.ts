@@ -29,6 +29,29 @@
  * Percent back is null for a lapped rider, a DNF, and every rider in a time
  * trial — `v_race_result` guarantees that (migration 0002, issue #48), and this
  * module never recomputes it. NICA is the scoring authority.
+ *
+ * ## Dot order (issue #74)
+ *
+ * `buildFieldStrip` used to sort only on `ours`, a stable sort, so every other
+ * dot kept whatever order the caller's array happened to arrive in — a
+ * contract the module never stated and a future caller could easily miss.
+ * **This module now owns the order**: it sorts every placeable mark by its
+ * `place`, the same guard `race-detail.ts`'s `placeRank` uses (`10` after `2`,
+ * a non-numeric or omitted `place` sorts last), so the wall and the Category
+ * view — the two callers this file's header already anticipates — get a
+ * correct dot order without having to remember to pre-sort.
+ *
+ * `place` is required on `FieldMark`, not optional: an optional field is a
+ * guarantee a future caller could still omit by accident, silently
+ * reproducing the exact pre-#74 bug for that caller — ties on `ours` alone,
+ * falling back to whatever order its array happened to arrive in. Owning the
+ * order only works if the module cannot be handed a mark without one, so the
+ * guarantee lives in the type rather than in a caller's memory. Every caller —
+ * `race-detail.ts`'s `categoryMarks`/`markFor`, and the wall and Category
+ * views this file's header already anticipates — passes through the source's
+ * published `place` string verbatim; nothing here computes or re-derives one.
+ * `ours` still wins over everything else: it is the primary sort key, `place`
+ * only orders within each of the two `ours` groups.
  */
 
 /**
@@ -48,6 +71,13 @@ export const MIN_AXIS_MAX = 10;
  */
 export type FieldMark = {
   pct: number | null;
+  /**
+   * The published place, exactly as the source printed it — `"1"`, `"10"`,
+   * `"*"` for a DNF. Required: see "Dot order" in the module header for why an
+   * optional field does not close issue #74. Never computed or re-derived
+   * here — the only legal value is what the source published.
+   */
+  place: string;
   /** Highlighted. Orange with an ink ring: our rider, in a field of grey. */
   ours: boolean;
   /** Named only for a highlighted mark; it reaches the accessible description. */
@@ -109,12 +139,42 @@ export function axisMax(marks: readonly FieldMark[], override?: number): number 
   return Math.max(MIN_AXIS_MAX, ...placed);
 }
 
+/** The only shape a published place is allowed to be read as a number in. */
+const WHOLE_NUMBER = /^\d+$/;
+
+/**
+ * A published `place` as a sort key, and nothing more.
+ *
+ * Mirrors `race-detail.ts`'s `placeRank`: `place` is the source's own string —
+ * `"1"`, `"10"`, `"*"` for a rider it did not place — so sorting it lexically
+ * would put `10` ahead of `2`. Read as a number when it is one; everything
+ * else, including an empty string, sorts to the same rank at the back.
+ * Nothing here computes or re-derives a place.
+ */
+function placeRank(place: string): number {
+  const trimmed = place.trim();
+  return WHOLE_NUMBER.test(trimmed) ? Number(trimmed) : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Two marks, by `place`. Ties (any pair of non-numeric places) come back `0` —
+ * `Array.prototype.sort` is stable, so they keep whatever order the caller
+ * handed in.
+ */
+function comparePlace(a: string, b: string): number {
+  const rankA = placeRank(a);
+  const rankB = placeRank(b);
+  if (rankA === rankB) return 0;
+  return rankA < rankB ? -1 : 1;
+}
+
 /**
  * Turn a field into a drawable strip.
  *
- * Ours are emitted last so they paint over the field — SVG has no z-index, so
- * paint order is the only ordering there is, and it has to be decided here
- * rather than left to the renderer.
+ * Dots are ordered `ours` last, then by `place` within each of those two
+ * groups (issue #74) — ours still paints over the field, since SVG has no
+ * z-index and paint order is the only ordering there is, and `place` settles
+ * the rest so a caller does not have to pre-sort correctly on its own.
  */
 export function buildFieldStrip(
   marks: readonly FieldMark[],
@@ -136,7 +196,7 @@ export function buildFieldStrip(
     ceiling === null
       ? []
       : [...placeable]
-          .sort((a, b) => Number(a.ours) - Number(b.ours))
+          .sort((a, b) => Number(a.ours) - Number(b.ours) || comparePlace(a.place, b.place))
           .map((m) => ({
             x: axisPosition(m.pct as number, ceiling),
             ours: m.ours,

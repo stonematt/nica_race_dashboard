@@ -239,7 +239,7 @@ describe('the category field handed to the strip', () => {
     expect(marks).toHaveLength(4);
     expect(marks.filter((m) => m.ours)).toHaveLength(2);
     // The lapped rider is ours AND unplaceable — both facts survive the trip.
-    expect(marks[1]).toEqual({ pct: null, ours: true });
+    expect(marks[1]).toEqual({ pct: null, place: '65', ours: true });
   });
 });
 
