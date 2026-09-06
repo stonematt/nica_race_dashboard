@@ -30,6 +30,7 @@
 
 import { ClubConfigError, loadClubConfig } from '../src/lib/club-config.ts';
 import { createDb } from '../src/lib/db/index.ts';
+import { resolveDatabaseUrl } from '../src/lib/db/url.ts';
 import {
   ClubMismatchError,
   NotAllowlistedError,
@@ -38,7 +39,7 @@ import {
   seedClubConfig,
   StrandedCoachError,
 } from '../src/lib/seed.ts';
-import { databaseUrl, loadEnvLocal } from './env.ts';
+import { loadEnvLocal } from './env.ts';
 
 loadEnvLocal();
 
@@ -63,7 +64,7 @@ if (!seedClub && !email) {
   process.exit(2);
 }
 
-const url = databaseUrl();
+const url = resolveDatabaseUrl();
 const db = createDb(url);
 
 try {

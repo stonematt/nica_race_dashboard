@@ -41,12 +41,3 @@ export function loadEnvLocal(root: string = repoRoot): string | undefined {
   process.loadEnvFile(file);
   return file;
 }
-
-/**
- * Where the database lives. PGlite writes `./.pglite` as a directory, and that
- * default is what lets a fresh clone migrate and seed with no configuration at
- * all — so it is the one variable whose absence is never a failure.
- */
-export function databaseUrl(env: Record<string, string | undefined> = process.env): string {
-  return env.DATABASE_URL ?? './.pglite';
-}
