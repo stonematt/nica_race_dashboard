@@ -49,6 +49,16 @@ export const authConfig = {
      */
     session({ session, token }) {
       session.provider = typeof token.provider === 'string' ? token.provider : undefined;
+
+      // `token.sub` is the id the provider's `authorize` returned at sign-in.
+      // Under the jwt strategy NextAuth does not carry it onto the session on
+      // its own — that is adapter-session behaviour — so without this line
+      // `session.user.id` is undefined on every request, and every query keyed
+      // on a coach silently receives null. `resolveClub` hid it behind its
+      // single-club fallback; `resolveDefaultSquad` did not, and the wall went
+      // blank against a fully seeded club.
+      if (session.user && typeof token.sub === 'string') session.user.id = token.sub;
+
       return session;
     },
 

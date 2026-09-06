@@ -24,9 +24,9 @@ const authorized = authConfig.callbacks.authorized as (arg: {
 // Two-step cast: next-auth's session callback declares an adapter-shaped
 // argument this one never reads, so the narrow shape is not directly comparable.
 const session = authConfig.callbacks.session as unknown as (arg: {
-  session: { provider?: string };
+  session: { provider?: string; user?: { id?: string } };
   token: Record<string, unknown>;
-}) => { provider?: string };
+}) => { provider?: string; user?: { id?: string } };
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -116,6 +116,20 @@ describe('the session callback', () => {
     // checked. A non-string here must not reach the gate as one.
     expect(session({ session: {}, token: { provider: 42 } }).provider).toBeUndefined();
     expect(session({ session: {}, token: {} }).provider).toBeUndefined();
+  });
+
+  it('carries the signed-in id onto the session', () => {
+    // Under the jwt strategy nothing does this for us, and without it every
+    // query keyed on a coach receives null instead of an id.
+    const out = session({ session: { user: {} }, token: { sub: 'coach-1' } });
+    expect(out.user?.id).toBe('coach-1');
+  });
+
+  it('leaves the id alone when the token carries none, or is not a string', () => {
+    expect(session({ session: { user: {} }, token: {} }).user?.id).toBeUndefined();
+    expect(session({ session: { user: {} }, token: { sub: 7 } }).user?.id).toBeUndefined();
+    // A session with no user at all must not throw on the way through.
+    expect(() => session({ session: {}, token: { sub: 'coach-1' } })).not.toThrow();
   });
 });
 
